@@ -48,6 +48,7 @@ The project is intentionally focused on **data engineering**. Do not add product
 - PostgreSQL: serving and Gold relational storage.
 - Metabase: final BI layer, lower priority.
 - Compose: local service orchestration.
+- Cron: lightweight scheduling for the single daily batch job.
 
 Do not add an HTTP/REST API to the MVP unless explicitly approved later.
 
@@ -191,6 +192,38 @@ tests/fixtures/basque_words.txt
 
 The same normalization and lexical rules must be shared by simulator-related test data and Spark validation logic to avoid inconsistent behavior.
 
+## Simulator design
+
+The simulator is implemented in Python and must be executable from Bash. Shell scripts may provide convenient wrappers, but the simulation rules and event-generation logic belong in Python, not in Bash.
+
+Reference workload profiles:
+
+- Demo: 20 users/day.
+- Development: 500 users/day.
+- Nominal TFM scenario: 1,000 users/day.
+- Load test: 60,000 users/day.
+
+The load-test profile is an accelerated test workload; it does not need to take a real day to publish 60,000 session events.
+
+Simulator rules:
+
+- Generate at most one completed session per simulated user and `business_date`.
+- Support deterministic/reproducible runs via a random seed.
+- Support an optional publishing delay for visually understandable demos and no/low delay for load tests.
+- Support valid empty sessions through a configurable empty-session probability/rate.
+- For non-empty sessions, generate the number of submitted words from configurable mean and standard-deviation parameters.
+- Expose these parameters conceptually as `--words-mean` and `--words-stddev` (exact CLI naming may be finalized during scaffolding).
+- The generated word count for a non-empty session must always be a positive integer (`>= 1`); negative or zero samples are not valid outputs of this distribution. Empty sessions are produced only through the explicit empty-session probability/rate.
+- Do not silently choose final default values for the mean or standard deviation; they remain configurable until workload assumptions are approved.
+- Under normal generation, submitted words are selected from `basque_words.txt` and must be compatible with the selected daily rhyme.
+- Do not artificially weight specific words to manufacture an originality distribution. Word selection may be random among eligible candidates.
+- Support a configurable probability/rate for replacing a normal dictionary selection with a randomly generated token that is not sourced from the dictionary.
+- Support a separate configurable probability/rate for producing a misspelled/corrupted word.
+- The exact default percentages for empty sessions, random non-dictionary words, and misspellings are not yet approved. Keep them configurable and do not silently choose final project defaults.
+- The simulator must emit the canonical Kafka v1 session contract and publish one Kafka message per completed session.
+
+Conceptual Bash usage should remain simple, for example a wrapper or command that ultimately invokes the Python simulator with parameters for user count, business date/rhyme scenario, seed, delay, word-count mean/standard deviation, empty-session rate, and error-injection rates. Exact script/module names are deferred until repository scaffolding is agreed.
+
 ## Word normalization and validation
 
 The agreed MVP validation flow is:
@@ -297,6 +330,7 @@ PostgreSQL
 |   `-- provisional_scores
 `-- gold
     |-- daily_scores
+    |-- rhyme_daily_metrics
     |-- weekly_rankings
     |-- monthly_rankings
     `-- business_kpis
@@ -309,6 +343,10 @@ Rules:
 - `serving.provisional_scores` must be written idempotently.
 - Final Gold loads must also be idempotent/re-runnable.
 - Exact keys, indexes, and upsert strategy are still pending design.
+- `gold.weekly_rankings` and `gold.monthly_rankings` must store both cumulative and average performance measures.
+- At minimum, preserve `total_score`, `average_score`, and `days_played` for weekly/monthly periods.
+- `gold.weekly_rankings` and `gold.monthly_rankings` must materialize both `rank_by_total` and `rank_by_average`.
+- `gold.rhyme_daily_metrics` is approved to store day/rhyme aggregates such as participant count, total valid words, average valid words per session, and the derived rhyme-difficulty metric.
 
 Metabase will consume PostgreSQL directly in a later phase. Direct PostgreSQL queries are sufficient during the main development stages.
 
@@ -361,6 +399,25 @@ Rules:
 
 Pending. Do not choose weights or a mathematical combination without user approval.
 
+## Business day close and late-event policy
+
+- Business timezone: `Europe/Madrid`.
+- Event timestamps remain stored in UTC; `business_date` is interpreted using the business timezone.
+- The logical game day changes at `00:00` local time.
+- Previous-day sessions have a 1-hour grace window after midnight.
+- The acceptance cutoff for business day `D` is therefore `01:00` local time on `D+1`.
+- A previous-day event arriving after that cutoff is not accepted into the functional pipeline.
+- Late events may be considered suspicious/malicious input and must not alter Silver, provisional scoring, Gold, or rankings.
+- Because Bronze is the immutable ingestion/audit layer, a late Kafka delivery may still be persisted physically in Bronze with its Kafka metadata.
+- When the lower-priority quarantine capability exists, late events should be classified explicitly (for example `LATE_EVENT`) instead of being silently dropped.
+- Gold for a business day must not be calculated through the normal scheduled path until the 1-hour grace window has closed.
+- The exact small technical delay/readiness check between the `01:00` cutoff and automatic batch start remains to be defined together with orchestration/checkpoint semantics.
+
+During the interval from `00:00` to `01:00`, the streaming pipeline may legitimately receive both:
+
+- sessions for the new business day, and
+- delayed sessions for the previous business day that are still within the grace window.
+
 ## Batch processing
 
 The normal daily batch consumes Silver, not Kafka and not Bronze.
@@ -372,11 +429,63 @@ Responsibilities include:
 - rhyme difficulty metrics
 - final daily score
 - daily ranking
-- weekly ranking
-- monthly ranking
+- weekly ranking metrics, including cumulative and average performance
+- monthly ranking metrics, including cumulative and average performance
 - Gold KPI generation
 
-The exact orchestration tool and daily close/watermark policy remain pending.
+The batch is scheduled by a lightweight cron-based scheduler service in Compose. The business-day acceptance cutoff is agreed; Spark watermark/checkpoint and the small post-cutoff readiness delay are still pending.
+
+## Manual execution and demo mode
+
+The project must support explicit manual execution of the main stages. This is a functional requirement for development, testing, and recording the TFM demonstration. Do not design the system so that the user must wait for real clock time or for the automatic scheduler to demonstrate the pipeline.
+
+Required manual capabilities:
+
+1. **Message simulation**
+   - Manually generate/publish a configurable set of synthetic completed-session events to Kafka.
+   - The simulator should support deterministic runs (for example via a seed) so a demo/test can be repeated.
+   - It should be possible to choose or explicitly provide the logical `business_date`/rhyme scenario used for the simulation.
+
+2. **Spark Structured Streaming execution**
+   - The streaming job must have an explicit manual start path for local development/demo.
+   - It must be possible to observe the full Kafka -> Bronze/Silver -> provisional PostgreSQL path without depending on an external scheduler.
+   - Manual execution must use the same production/MVP transformation logic; do not create a separate fake implementation for demos.
+
+3. **Spark batch execution**
+   - The daily batch must be manually executable for an explicit `business_date`.
+   - A controlled local/demo `force` mechanism must allow the user to run the batch before the real-time day-close condition, specifically for tests and the recorded demonstration.
+   - Forced execution must be explicit, clearly logged, and must not become the default behavior of the scheduled path.
+   - Re-running the batch for the same date must remain idempotent.
+
+The exact CLI/script names are intentionally deferred until the repository scaffolding and Python packaging/tooling are agreed.
+
+## Batch orchestration
+
+The project deliberately does **not** use Airflow, Prefect, or Dagster for the MVP. There is a single scheduled daily batch, so a full workflow orchestrator would add operational complexity without proportional value.
+
+Approved design:
+
+- Use a lightweight cron-based scheduler.
+- Run cron as a dedicated service in `compose.yaml`, separate from the long-running Spark streaming process.
+- The scheduler invokes the same batch implementation used by manual/demo execution; do not maintain a separate scheduled code path.
+- Normal automatic execution occurs after the previous business day's `01:00 Europe/Madrid` acceptance cutoff, with a small readiness delay/check still to be defined.
+- Manual execution for an explicit `business_date` remains available.
+- A `--force`-style capability is allowed only for local development, tests, and recorded demos; it must be explicit and logged.
+- Re-running a scheduled or manually invoked batch for the same `business_date` must be idempotent.
+- Do not embed unrelated long-running application processes into the scheduler container. Keep scheduling and Spark execution responsibilities conceptually separate.
+
+Rationale to preserve in project documentation: the MVP has one time-triggered batch with simple dependencies, so cron is sufficient and easier to operate on the reference Windows/Podman workstation. A heavier orchestrator may be reconsidered only if the workflow graph becomes materially more complex.
+
+A target recorded-demo flow should be possible conceptually as:
+
+```text
+start local infrastructure
+    -> start Spark Structured Streaming manually
+    -> simulate/publish session events manually
+    -> inspect Bronze + Silver + serving.provisional_scores
+    -> force daily batch for the chosen business_date
+    -> inspect PostgreSQL Gold/rankings
+```
 
 ## Quarantine / invalid events
 
@@ -398,6 +507,7 @@ Potential error categories:
 - `CONTRACT_VALIDATION_ERROR`
 - `BUSINESS_RULE_VIOLATION`
 - `INTEGRITY_CONFLICT`
+- `LATE_EVENT`
 
 Word-level invalidity is not quarantine. Invalid words belonging to a processable session stay in `silver/session-words` with `is_valid = false`.
 
@@ -468,19 +578,18 @@ Do not silently resolve the following items. Discuss them with the user when the
 1. Exact final scoring formula and weights.
 2. Exact `silver/sessions` and `silver/session-words` schemas.
 3. PostgreSQL keys, indexes, and upsert implementation.
-4. Logical day-close policy and late-event handling.
-5. Spark checkpoint/watermark details.
-6. Batch orchestration tool and schedule.
-7. Expected number of simulated users, average words/session, event size, and throughput targets.
-8. Concrete SMART/SLO acceptance targets for streaming latency and batch runtime.
-9. Exact Python version and dependency/package manager.
-10. Detailed repository scaffolding/module layout.
-11. Monitoring/observability implementation.
-12. Metabase dashboards.
-13. Final availability and inspection of `basque_words.txt`.
-14. Whether any graph-based word/rhyme analysis remains in scope.
-15. Project calendar and milestone dates.
+4. Spark checkpoint/watermark and post-cutoff batch-readiness details.
+5. Exact small post-cutoff readiness delay/check for the cron-triggered batch.
+6. Default simulator word-count mean/standard deviation, event size, throughput targets, and exact simulator error-injection percentages. User-count profiles are agreed as 20 demo / 500 development / 1,000 nominal / 60,000 load test; mean and standard deviation are configurable parameters and final defaults are still pending.
+7. Concrete SMART/SLO acceptance targets for streaming latency and batch runtime.
+8. Exact Python version and dependency/package manager.
+9. Detailed repository scaffolding/module layout and exact manual/demo CLI commands.
+10. Monitoring/observability implementation.
+11. Metabase dashboards.
+12. Final availability and inspection of `basque_words.txt`.
+13. Whether any graph-based word/rhyme analysis remains in scope.
+14. Project calendar and milestone dates.
 
 ## Resume point
 
-At this checkpoint, the next design topic should be selected from the open decisions above. The Kafka transport and v1 input contract, the main streaming/batch data flow, the Medallion responsibilities, the lexical validation concept, and the conceptual originality/rhyme-difficulty metrics are already agreed.
+At this checkpoint, the Kafka transport and v1 input contract, the main streaming/batch data flow, the Medallion responsibilities, the lexical validation concept, the conceptual originality/rhyme-difficulty metrics, the cumulative/average weekly-monthly ranking model, and the business-day cutoff policy are agreed. Manual execution of message simulation, Spark streaming, and Spark batch (including an explicit local/demo force path) is also a required capability. Daily batch orchestration is agreed as a lightweight cron-based scheduler service in Compose, not Airflow/Prefect/Dagster. The Python simulator is required to be Bash-invokable, deterministic when seeded, configurable for empty sessions, positive word-count generation via mean/standard-deviation parameters, and two independent invalid-word injection modes, and sized for 20/500/1,000/60,000-user demo/development/nominal/load profiles. Continue with the remaining open design decisions; do not revisit agreed items unless the user asks to change them.
