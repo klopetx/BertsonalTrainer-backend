@@ -122,7 +122,35 @@ services:
     command: ["--help"]
     profiles: ["simulator"]
 
+  spark-streaming:
+    build:
+      context: .
+      dockerfile: services/spark/Dockerfile
+    depends_on:
+      kafka:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_TOPIC: session-events
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: ${POSTGRES_USER:-bertsonal}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bertsonal_pw}
+      POSTGRES_DB: ${POSTGRES_DB:-bertsonal}
+      SPARK_CHECKPOINT_ROOT: /opt/app/checkpoints/streaming
+    volumes:
+      - spark_checkpoints:/opt/app/checkpoints
+    restart: unless-stopped
+
 volumes:
   kafka_data: {}
   minio_data: {}
   postgres_data: {}
+  spark_checkpoints: {}

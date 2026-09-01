@@ -24,11 +24,11 @@ This living document breaks down the BertsonalTrainer backend build into sequenc
 2. [x] MinIO + PostgreSQL services in Compose with init containers:
    - `minio`: buckets for Bronze (`bronze/session-events/…`), Silver, checkpoints (`system/checkpoints/streaming/<query>/`).
    - `postgres`: bootstrap schema per `docs/postgres-model.md` for `serving.provisional_scores`.
-3. [ ] Spark streaming service scaffold (`services/spark`):
-   - Shared image with Structured Streaming job reading Kafka → Bronze (immutable), Silver (structured sessions), provisional scores.
-   - Persistent checkpoints in MinIO.
-   - Normalization/validation shared module per `docs/medallion-model.md`.
-4. [ ] Scripts: `./scripts/infra-up.sh` (✅ implemented), plus upcoming `./scripts/streaming-up.sh`, `./scripts/down.sh`, `./scripts/logs.sh <service>`.
+3. [x] Spark streaming service scaffold (`services/spark`):
+   - Docker image (`services/spark/Dockerfile`) installing Spark deps + project code.
+   - Placeholder streaming entrypoint (`bertsonal_spark/streaming/main.py`) that boots Spark, logs config, and stays alive for future ingestion logic.
+   - Persistent checkpoints volume declared in Compose.
+4. [ ] Scripts: `./scripts/infra-up.sh` (✅ implemented) + `./scripts/streaming-up.sh` (✅ implemented) + upcoming `./scripts/down.sh`, `./scripts/logs.sh <service>`.
 
 ### Verification
 - Integration test: simulator → Kafka → Spark streaming → MinIO/ Postgres (can be manual initially, later automated via `scripts/test.sh` profile).
@@ -67,6 +67,6 @@ This living document breaks down the BertsonalTrainer backend build into sequenc
 5. **Documentation hygiene** — update this plan and affected docs when scope changes; link commits to plan sections for traceability.
 
 ## Next Actions
-1. Scaffold the Spark streaming container and codebase per Phase 2 goals.
-2. Add the remaining orchestration scripts (`streaming-up`, `down`, `logs`) once streaming is ready.
+1. Flesh out the Spark streaming job to actually ingest Kafka -> Bronze/Silver/Postgres once schemas are finalized.
+2. Add the remaining orchestration scripts (`down`, `logs`) and shared stopping workflow.
 3. Extend tests (unit + integration) as components land, ensuring `scripts/test.sh` remains the single entry point.

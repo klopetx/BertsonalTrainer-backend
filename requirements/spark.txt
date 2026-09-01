@@ -1,0 +1,5 @@
+# Python dependencies for Spark streaming/batch jobs
+pyspark==3.5.1
+boto3==1.34.146
+psycopg2-binary==2.9.9
+python-dateutil==2.9.0.post0
