@@ -33,14 +33,22 @@ services:
     depends_on:
       kafka:
         condition: service_healthy
-    environment:
-      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      KAFKA_TOPIC: session-events
-    entrypoint: ["/bin/sh", "-c"]
-    command: >
-      /opt/kafka/bin/kafka-topics.sh --bootstrap-server "$${KAFKA_BOOTSTRAP_SERVERS}"
-      --create --if-not-exists --topic "$${KAFKA_TOPIC}" --partitions 1 --replication-factor 1
-      --config retention.ms=259200000 --config min.insync.replicas=1
+    command:
+      - /opt/kafka/bin/kafka-topics.sh
+      - --bootstrap-server
+      - kafka:9092
+      - --create
+      - --if-not-exists
+      - --topic
+      - session-events
+      - --partitions
+      - "1"
+      - --replication-factor
+      - "1"
+      - --config
+      - retention.ms=259200000
+      - --config
+      - min.insync.replicas=1
     restart: "no"
 
   simulator:
