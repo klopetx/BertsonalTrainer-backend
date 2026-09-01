@@ -1,0 +1,3 @@
+# Runtime dependencies for the simulator container.
+kafka-python==2.0.2
+python-dateutil==2.9.0.post0
