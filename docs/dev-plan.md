@@ -21,7 +21,7 @@ This living document breaks down the BertsonalTrainer backend build into sequenc
 
 ### Deliverables
 1. [x] `kafka-init` helper service to declare `session-events` (1 partition, 3-day retention) automatically. (See `compose.yaml` service `kafka-init`.)
-2. [ ] MinIO + PostgreSQL services in Compose with init containers:
+2. [x] MinIO + PostgreSQL services in Compose with init containers:
    - `minio`: buckets for Bronze (`bronze/session-events/…`), Silver, checkpoints (`system/checkpoints/streaming/<query>/`).
    - `postgres`: bootstrap schema per `docs/postgres-model.md` for `serving.provisional_scores`.
 3. [ ] Spark streaming service scaffold (`services/spark`):
@@ -67,6 +67,6 @@ This living document breaks down the BertsonalTrainer backend build into sequenc
 5. **Documentation hygiene** — update this plan and affected docs when scope changes; link commits to plan sections for traceability.
 
 ## Next Actions
-1. Scaffold MinIO/PostgreSQL services and the Spark streaming container per Phase 2 goals.
-2. Add the remaining orchestration scripts (`streaming-up`, `down`, `logs`) once new services exist.
+1. Scaffold the Spark streaming container and codebase per Phase 2 goals.
+2. Add the remaining orchestration scripts (`streaming-up`, `down`, `logs`) once streaming is ready.
 3. Extend tests (unit + integration) as components land, ensuring `scripts/test.sh` remains the single entry point.
