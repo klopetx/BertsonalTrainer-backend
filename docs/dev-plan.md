@@ -20,15 +20,15 @@ This living document breaks down the BertsonalTrainer backend build into sequenc
 **Goal:** End-to-end ingestion from Kafka into Bronze/Silver + provisional PostgreSQL.
 
 ### Deliverables
-1. `kafka-init` helper service or script to declare `session-events` (1 partition, 3-day retention) automatically.
-2. MinIO + PostgreSQL services in Compose with init containers:
+1. [x] `kafka-init` helper service to declare `session-events` (1 partition, 3-day retention) automatically. (See `compose.yaml` service `kafka-init`.)
+2. [ ] MinIO + PostgreSQL services in Compose with init containers:
    - `minio`: buckets for Bronze (`bronze/session-events/…`), Silver, checkpoints (`system/checkpoints/streaming/<query>/`).
    - `postgres`: bootstrap schema per `docs/postgres-model.md` for `serving.provisional_scores`.
-3. Spark streaming service scaffold (`services/spark`):
+3. [ ] Spark streaming service scaffold (`services/spark`):
    - Shared image with Structured Streaming job reading Kafka → Bronze (immutable), Silver (structured sessions), provisional scores.
    - Persistent checkpoints in MinIO.
    - Normalization/validation shared module per `docs/medallion-model.md`.
-4. Scripts: `./scripts/infra-up.sh`, `./scripts/streaming-up.sh`, `./scripts/down.sh`, `./scripts/logs.sh <service>`.
+4. [ ] Scripts: `./scripts/infra-up.sh`, `./scripts/streaming-up.sh`, `./scripts/down.sh`, `./scripts/logs.sh <service>`.
 
 ### Verification
 - Integration test: simulator → Kafka → Spark streaming → MinIO/ Postgres (can be manual initially, later automated via `scripts/test.sh` profile).
@@ -67,6 +67,6 @@ This living document breaks down the BertsonalTrainer backend build into sequenc
 5. **Documentation hygiene** — update this plan and affected docs when scope changes; link commits to plan sections for traceability.
 
 ## Next Actions
-1. Implement `kafka-init` + `infra-up.sh` to remove manual topic creation.
-2. Scaffold MinIO/PostgreSQL services and Spark streaming container per Phase 2.
+1. Add `scripts/infra-up.sh` to orchestrate Kafka + kafka-init and prepare for MinIO/PostgreSQL services.
+2. Scaffold MinIO/PostgreSQL services and Spark streaming container per Phase 2 goals.
 3. Extend tests (unit + integration) as components land, ensuring `scripts/test.sh` remains the single entry point.
