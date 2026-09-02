@@ -464,7 +464,7 @@ def main() -> int:
     )
 
     queries.append(
-        sessions_df.writeStream.outputMode("append")
+        sessions_df.writeStream.outputMode("update")
         .option("checkpointLocation", f"{config.checkpoint_root}/silver_pipeline")
         .foreachBatch(
             lambda df, batch_id: _process_silver_batch(
