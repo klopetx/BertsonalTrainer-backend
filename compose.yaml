@@ -21,7 +21,9 @@ services:
       KAFKA_NUM_PARTITIONS: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
     volumes:
-      - kafka_data:/var/lib/kafka/data
+      - type: bind
+        source: "${HOST_VOLUMES_ROOT:-K:/MASTER_BIG_DATA/TFM/VOLUMES}/kafka"
+        target: /var/lib/kafka/data
     healthcheck:
       test: ["CMD", "bash", "-c", ">/dev/tcp/127.0.0.1/9092"]
       interval: 10s
@@ -61,7 +63,9 @@ services:
       - "9000:9000"
       - "9001:9001"
     volumes:
-      - minio_data:/data
+      - type: bind
+        source: "${HOST_VOLUMES_ROOT:-K:/MASTER_BIG_DATA/TFM/VOLUMES}/minio"
+        target: /data
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 10s
@@ -156,6 +160,4 @@ services:
     restart: unless-stopped
 
 volumes:
-  kafka_data: {}
-  minio_data: {}
   postgres_data: {}
