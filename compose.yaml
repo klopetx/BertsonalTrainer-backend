@@ -159,5 +159,62 @@ services:
         read_only: true
     restart: unless-stopped
 
+  spark-batch:
+    build:
+      context: .
+      dockerfile: services/spark/Dockerfile
+    entrypoint: ["python", "-m", "bertsonal_spark.batch.main"]
+    depends_on:
+      minio:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    environment:
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+      SILVER_SESSIONS_PATH: s3a://silver/sessions
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: ${POSTGRES_USER:-bertsonal}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bertsonal_pw}
+      POSTGRES_DB: ${POSTGRES_DB:-bertsonal}
+      BUSINESS_TIMEZONE: ${BUSINESS_TIMEZONE:-Europe/Madrid}
+      BUSINESS_DAY_CUTOFF_HOUR: ${BUSINESS_DAY_CUTOFF_HOUR:-1}
+    volumes:
+      - type: bind
+        source: ./data/reference
+        target: /opt/app/data/reference
+        read_only: true
+
+  scheduler:
+    build:
+      context: .
+      dockerfile: services/spark/Dockerfile
+    command: ["python", "-m", "bertsonal_spark.scheduler.main"]
+    restart: unless-stopped
+    depends_on:
+      minio:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    environment:
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+      SILVER_SESSIONS_PATH: s3a://silver/sessions
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: ${POSTGRES_USER:-bertsonal}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bertsonal_pw}
+      POSTGRES_DB: ${POSTGRES_DB:-bertsonal}
+      BUSINESS_TIMEZONE: ${BUSINESS_TIMEZONE:-Europe/Madrid}
+      BUSINESS_DAY_CUTOFF_HOUR: ${BUSINESS_DAY_CUTOFF_HOUR:-1}
+      SCHEDULER_POLL_INTERVAL_SECONDS: ${SCHEDULER_POLL_INTERVAL_SECONDS:-300}
+
 volumes:
   postgres_data: {}

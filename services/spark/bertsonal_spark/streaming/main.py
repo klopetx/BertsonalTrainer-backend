@@ -15,6 +15,7 @@ from pyspark.sql import types as T
 from pyspark.sql.streaming import StreamingQuery
 
 from bertsonal_spark.common.dictionary import load_dictionary
+from bertsonal_spark.common.spark_utils import build_spark_session, configure_s3
 from bertsonal_spark.common.validation import (
     is_dictionary_word,
     matches_rhyme,
@@ -54,26 +55,6 @@ def _setup_logging() -> None:
     )
 
 
-def _configure_s3(spark: SparkSession, config: StreamingConfig) -> None:
-    hadoop_conf = spark._jsc.hadoopConfiguration()
-    endpoint = config.minio_endpoint
-    if endpoint.startswith("https://"):
-        host = endpoint[len("https://") :]
-        hadoop_conf.set("fs.s3a.connection.ssl.enabled", "true")
-    elif endpoint.startswith("http://"):
-        host = endpoint[len("http://") :]
-        hadoop_conf.set("fs.s3a.connection.ssl.enabled", "false")
-    else:
-        host = endpoint
-        hadoop_conf.set("fs.s3a.connection.ssl.enabled", "false")
-
-    hadoop_conf.set("fs.s3a.endpoint", host)
-    hadoop_conf.set("fs.s3a.access.key", config.minio_access_key)
-    hadoop_conf.set("fs.s3a.secret.key", config.minio_secret_key)
-    hadoop_conf.set("fs.s3a.path.style.access", "true")
-    hadoop_conf.set("fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
-
-
 def _bucket_from_path(path: str) -> str | None:
     if not path.startswith("s3a://"):
         return None
@@ -106,26 +87,6 @@ def _ensure_buckets(config: StreamingConfig) -> None:
             continue
         except session.exceptions.BucketAlreadyExists:
             continue
-
-
-def _build_spark_session(config: StreamingConfig) -> SparkSession:
-    packages = ",".join(
-        [
-            "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.1",
-            "org.apache.hadoop:hadoop-aws:3.3.4",
-        ]
-    )
-
-    builder = (
-        SparkSession.builder.appName(config.app_name)
-        .master("local[*]")
-        .config("spark.sql.shuffle.partitions", "4")
-        .config("spark.sql.streaming.stateStore.maintenanceInterval", "300s")
-        .config("spark.jars.packages", packages)
-    )
-    spark = builder.getOrCreate()
-    spark.sparkContext.setLogLevel("WARN")
-    return spark
 
 
 def _broadcast_dictionary(spark: SparkSession, dictionary_path: Path):
@@ -542,8 +503,11 @@ def _ensure_provisional_table(conn) -> None:
 def main() -> int:
     _setup_logging()
     config = StreamingConfig()
-    spark = _build_spark_session(config)
-    _configure_s3(spark, config)
+    spark = build_spark_session(
+        config.app_name,
+        {"spark.sql.streaming.stateStore.maintenanceInterval": "300s"},
+    )
+    configure_s3(spark, config.minio_endpoint, config.minio_access_key, config.minio_secret_key)
     _ensure_buckets(config)
 
     dictionary_bc = _broadcast_dictionary(spark, Path(config.dictionary_path))

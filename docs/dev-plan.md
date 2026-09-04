@@ -29,7 +29,7 @@ This living document breaks down the BertsonalTrainer backend build into sequenc
    - Docker image installing Spark deps + shared project code.
    - Production ingestion entrypoint (`bertsonal_spark/streaming/main.py`) wiring Kafka → Bronze (raw parquet + lineage), Silver sessions/words (contract validation, duplicate handling, late-event filtering), and `serving.provisional_scores` inserts.
    - Persistent checkpoints volume in MinIO under `system/checkpoints/streaming/<query>/`.
-4. [ ] Scripts: `./scripts/infra-up.sh` (✅) + `./scripts/streaming-up.sh` (✅) + upcoming `./scripts/down.sh`, `./scripts/logs.sh <service>` for consistent lifecycle management.
+4. [x] Scripts: `./scripts/infra-up.sh`, `./scripts/streaming-up.sh`, `./scripts/down.sh`, `./scripts/logs.sh <service>` keep podman usage consistent across environments.
 
 ### Verification
 - Integration test: `infra-up` → `streaming-up` → simulator → observe Bronze parquet, Silver parquet (partitioned by `business_date`), and provisional-score inserts; repeatable via `scripts/test.sh` streaming suite.
@@ -37,15 +37,14 @@ This living document breaks down the BertsonalTrainer backend build into sequenc
 - Logs surface late/invalid event drops (e.g., `CONTRACT_VALIDATION_ERROR`, `LATE_EVENT`) instead of silently discarding data.
 
 ## Phase 3 — Daily Batch + Scheduler (P1)
+**Status:** 🟡 skeletal batch/scheduler landed; scoring/rankings TBD
 **Goal:** Deterministic Gold tables and cron automation.
 
 ### Deliverables
-1. Spark batch job (`services/spark/batch`) implementing:
-   - Bronze → Silver replay (dedupe), originality + rhyme-difficulty metrics (pending open decisions).
-   - Gold tables + rankings per `docs/batch-and-scoring.md` and `docs/postgres-model.md`.
-2. Scheduler service reusing Spark batch image (`services/spark/scheduler` or similar) to run cron after business-day cutoff (`Europe/Madrid 01:00` + readiness delay once defined).
-3. Script wrappers: `./scripts/batch-run.sh --business-date YYYY-MM-DD [--force]` and `./scripts/scheduler-up.sh`.
-4. Tests: unit tests for scoring logic, integration tests for replace-by-scope writes.
+1. [🟡] Spark batch job (`services/spark/batch`) now ingests Silver partitions, applies first-event-wins deduplication, and populates `gold.daily_scores` + `gold.rhyme_daily_metrics`. Originality weights, rhyme difficulty scoring, and rankings remain TODO.
+2. [🟡] Scheduler service (`services/spark/scheduler`) reuses the Spark image and polls post-cutoff; readiness delay rules still open.
+3. [x] Script wrappers: `./scripts/batch-run.sh --business-date YYYY-MM-DD [--force]` and `./scripts/scheduler-up.sh` enable manual and continuous runs.
+4. [🟡] Tests: basic cutoff/unit coverage lands in `tests/batch/`; end-to-end replace-by-scope verification pending future scoring work.
 
 ### Verification
 - Batch rerun idempotency (same date yields same Gold state).
