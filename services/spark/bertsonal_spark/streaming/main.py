@@ -118,6 +118,7 @@ def _build_kafka_source(spark: SparkSession, config: StreamingConfig) -> DataFra
         .option("kafka.bootstrap.servers", config.kafka_bootstrap_servers)
         .option("subscribe", config.kafka_topic)
         .option("startingOffsets", "earliest")
+        .option("failOnDataLoss", "false")
         .load()
     )
 
