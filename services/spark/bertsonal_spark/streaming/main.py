@@ -24,6 +24,8 @@ from bertsonal_spark.config import StreamingConfig
 
 
 SCHEMA_INITIALIZED = False
+VALID_SCHEMA_VERSION = "1.0"
+UUID_REGEX = r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
 
 
 logger = logging.getLogger(__name__)
@@ -191,14 +193,15 @@ def _parsed_df(kafka_df: DataFrame) -> DataFrame:
     )
 
 
-def _sessions_df(parsed_df: DataFrame, normalize_udf) -> DataFrame:
+def _sessions_df(parsed_df: DataFrame, normalize_udf, config: StreamingConfig) -> DataFrame:
+    cutoff_hour = max(0, min(23, int(config.business_cutoff_hour)))
     sessions = parsed_df.select(
         "source_record_id",
         "payload_hash",
-        "topic",
-        "partition",
-        "offset",
-        "timestamp",
+        F.col("topic"),
+        F.col("partition"),
+        F.col("offset"),
+        F.col("timestamp").alias("kafka_timestamp"),
         "processed_at",
         F.col("data.schema_version").alias("schema_version"),
         F.col("data.event_id").alias("event_id"),
@@ -212,12 +215,67 @@ def _sessions_df(parsed_df: DataFrame, normalize_udf) -> DataFrame:
         F.col("data.submitted_words").alias("submitted_words"),
     )
 
+    sessions = sessions.withColumn("normalized_rhyme", normalize_udf(F.col("rhyme")))
+
     sessions = sessions.withColumn(
-        "normalized_rhyme", normalize_udf(F.col("rhyme"))
-    ).withColumn(
         "submitted_word_count",
-        F.size(F.coalesce(F.col("submitted_words"), F.array().cast("array<string>"))),
+        F.when(F.col("submitted_words").isNull(), F.lit(0)).otherwise(
+            F.size(F.col("submitted_words"))
+        ),
     )
+
+    def _non_empty_string(column_name: str):
+        column = F.col(column_name).cast("string")
+        return column.isNotNull() & (F.length(F.trim(column)) > 0)
+
+    sessions = sessions.withColumn(
+        "valid_schema_version", F.col("schema_version") == F.lit(VALID_SCHEMA_VERSION)
+    ).withColumn(
+        "valid_event_id",
+        _non_empty_string("event_id") & F.col("event_id").rlike(UUID_REGEX),
+    ).withColumn(
+        "valid_session_id",
+        _non_empty_string("session_id") & F.col("session_id").rlike(UUID_REGEX),
+    ).withColumn(
+        "valid_user_id", _non_empty_string("user_id"),
+    ).withColumn(
+        "valid_business_date", F.col("business_date").isNotNull(),
+    ).withColumn(
+        "valid_rhyme_id", _non_empty_string("rhyme_id"),
+    ).withColumn(
+        "valid_rhyme", _non_empty_string("rhyme"),
+    ).withColumn(
+        "valid_timestamps",
+        F.col("started_at").isNotNull()
+        & F.col("completed_at").isNotNull()
+        & (F.col("completed_at") >= F.col("started_at")),
+    ).withColumn(
+        "valid_submitted_words", F.col("submitted_words").isNotNull(),
+    )
+
+    sessions = sessions.withColumn(
+        "contract_valid",
+        F.col("valid_schema_version")
+        & F.col("valid_event_id")
+        & F.col("valid_session_id")
+        & F.col("valid_user_id")
+        & F.col("valid_business_date")
+        & F.col("valid_rhyme_id")
+        & F.col("valid_rhyme")
+        & F.col("valid_timestamps")
+        & F.col("valid_submitted_words"),
+    )
+
+    cutoff_local = F.to_timestamp(
+        F.concat_ws(
+            " ",
+            F.date_format(F.date_add(F.col("business_date"), 1), "yyyy-MM-dd"),
+            F.lit(f"{cutoff_hour:02d}:00:00"),
+        ),
+        "yyyy-MM-dd HH:mm:ss",
+    )
+    cutoff_utc = F.to_utc_timestamp(cutoff_local, config.business_timezone)
+    sessions = sessions.withColumn("is_late_event", F.col("kafka_timestamp") >= cutoff_utc)
 
     return sessions
 
@@ -278,12 +336,28 @@ def _session_metrics(words_df: DataFrame) -> DataFrame:
 def _silver_sessions_output(sessions_df: DataFrame, metrics_df: DataFrame) -> DataFrame:
     enriched = sessions_df.join(metrics_df, "source_record_id", "left")
     enriched = enriched.fillna({"valid_word_count": 0, "invalid_word_count": 0})
+    drop_cols = [
+        "submitted_words",
+        "normalized_rhyme",
+        "valid_schema_version",
+        "valid_event_id",
+        "valid_session_id",
+        "valid_user_id",
+        "valid_business_date",
+        "valid_rhyme_id",
+        "valid_rhyme",
+        "valid_timestamps",
+        "valid_submitted_words",
+        "contract_valid",
+        "is_late_event",
+    ]
+    existing_drop_cols = [col for col in drop_cols if col in enriched.columns]
+    if existing_drop_cols:
+        enriched = enriched.drop(*existing_drop_cols)
     enriched = (
         enriched.withColumnRenamed("topic", "kafka_topic")
         .withColumnRenamed("partition", "kafka_partition")
         .withColumnRenamed("offset", "kafka_offset")
-        .withColumnRenamed("timestamp", "kafka_timestamp")
-        .drop("submitted_words", "normalized_rhyme")
     )
     return enriched
 
@@ -325,9 +399,38 @@ def _process_silver_batch(
         logger.info("Skipping empty batch %s for silver outputs", batch_id)
         return
 
-    words_df = _words_df(batch_df, normalize_udf, dictionary_udf, rhyme_udf).cache()
+    processable_condition = F.col("contract_valid") & (~F.col("is_late_event"))
+    valid_df = batch_df.filter(processable_condition).cache()
+    dropped_df = batch_df.filter(~processable_condition)
+
+    if not dropped_df.rdd.isEmpty():
+        reason_counts = (
+            dropped_df.withColumn(
+                "drop_reason",
+                F.when(~F.col("contract_valid"), F.lit("CONTRACT_VALIDATION_ERROR"))
+                .when(F.col("is_late_event"), F.lit("LATE_EVENT"))
+                .otherwise(F.lit("UNKNOWN")),
+            )
+            .groupBy("drop_reason")
+            .count()
+            .collect()
+        )
+        for row in reason_counts:
+            logger.warning(
+                "Batch %s dropped %s records due to %s",
+                batch_id,
+                row["count"],
+                row["drop_reason"],
+            )
+
+    if valid_df.rdd.isEmpty():
+        logger.info("No processable records in batch %s", batch_id)
+        valid_df.unpersist()
+        return
+
+    words_df = _words_df(valid_df, normalize_udf, dictionary_udf, rhyme_udf).cache()
     metrics_df = _session_metrics(words_df)
-    silver_sessions_df = _silver_sessions_output(batch_df, metrics_df).cache()
+    silver_sessions_df = _silver_sessions_output(valid_df, metrics_df).cache()
     words_output_df = _words_output(words_df)
 
     _write_partitioned_parquet(
@@ -338,6 +441,7 @@ def _process_silver_batch(
 
     words_df.unpersist()
     silver_sessions_df.unpersist()
+    valid_df.unpersist()
 
 
 def _write_provisional_scores(batch_df: DataFrame, batch_id: int, config: StreamingConfig) -> None:
@@ -450,7 +554,7 @@ def main() -> int:
     kafka_df = _build_kafka_source(spark, config)
     bronze_df = _bronze_df(kafka_df)
     parsed_df = _parsed_df(kafka_df)
-    sessions_df = _sessions_df(parsed_df, normalize_udf)
+    sessions_df = _sessions_df(parsed_df, normalize_udf, config)
 
     queries: List[StreamingQuery] = []
 
