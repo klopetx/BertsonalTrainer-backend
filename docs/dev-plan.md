@@ -16,7 +16,8 @@ This living document breaks down the BertsonalTrainer backend build into sequenc
 - Kafka single-node broker in Compose with manual topic creation.
 - Smoke tests + unit tests (`tests/simulator/`) proving payload generation matches `docs/kafka-contract.md`.
 
-## Phase 2 — Core Infra + Streaming Skeleton (P0 remainder)
+## Phase 2 — Core Infra + Streaming Ingestion (P0 remainder)
+**Status:** ✅ streaming path completed (infra + ingestion + provisional serving)
 **Goal:** End-to-end ingestion from Kafka into Bronze/Silver + provisional PostgreSQL.
 
 ### Deliverables
@@ -24,15 +25,16 @@ This living document breaks down the BertsonalTrainer backend build into sequenc
 2. [x] MinIO + PostgreSQL services in Compose with init containers:
    - `minio`: buckets for Bronze (`bronze/session-events/…`), Silver, checkpoints (`system/checkpoints/streaming/<query>/`).
    - `postgres`: bootstrap schema per `docs/postgres-model.md` for `serving.provisional_scores`.
-3. [x] Spark streaming service scaffold (`services/spark`):
-   - Docker image (`services/spark/Dockerfile`) installing Spark deps + project code.
-   - Placeholder streaming entrypoint (`bertsonal_spark/streaming/main.py`) that boots Spark, logs config, and stays alive for future ingestion logic.
-   - Persistent checkpoints volume declared in Compose.
-4. [ ] Scripts: `./scripts/infra-up.sh` (✅ implemented) + `./scripts/streaming-up.sh` (✅ implemented) + upcoming `./scripts/down.sh`, `./scripts/logs.sh <service>`.
+3. [x] Spark streaming service (`services/spark`):
+   - Docker image installing Spark deps + shared project code.
+   - Production ingestion entrypoint (`bertsonal_spark/streaming/main.py`) wiring Kafka → Bronze (raw parquet + lineage), Silver sessions/words (contract validation, duplicate handling, late-event filtering), and `serving.provisional_scores` inserts.
+   - Persistent checkpoints volume in MinIO under `system/checkpoints/streaming/<query>/`.
+4. [ ] Scripts: `./scripts/infra-up.sh` (✅) + `./scripts/streaming-up.sh` (✅) + upcoming `./scripts/down.sh`, `./scripts/logs.sh <service>` for consistent lifecycle management.
 
 ### Verification
-- Integration test: simulator → Kafka → Spark streaming → MinIO/ Postgres (can be manual initially, later automated via `scripts/test.sh` profile).
-- Bronze partitions contain raw Kafka payload + metadata; Silver tables reflect dedup rules; PostgreSQL provisional table shows inserts with `ON CONFLICT DO NOTHING` semantics.
+- Integration test: `infra-up` → `streaming-up` → simulator → observe Bronze parquet, Silver parquet (partitioned by `business_date`), and provisional-score inserts; repeatable via `scripts/test.sh` streaming suite.
+- Bronze partitions capture raw Kafka payload + metadata; Silver tables reflect validation + duplicate rules; PostgreSQL provisional table enforces `ON CONFLICT DO NOTHING` for idempotency.
+- Logs surface late/invalid event drops (e.g., `CONTRACT_VALIDATION_ERROR`, `LATE_EVENT`) instead of silently discarding data.
 
 ## Phase 3 — Daily Batch + Scheduler (P1)
 **Goal:** Deterministic Gold tables and cron automation.
@@ -67,6 +69,6 @@ This living document breaks down the BertsonalTrainer backend build into sequenc
 5. **Documentation hygiene** — update this plan and affected docs when scope changes; link commits to plan sections for traceability.
 
 ## Next Actions
-1. Flesh out the Spark streaming job to actually ingest Kafka -> Bronze/Silver/Postgres once schemas are finalized.
-2. Add the remaining orchestration scripts (`down`, `logs`) and shared stopping workflow.
-3. Extend tests (unit + integration) as components land, ensuring `scripts/test.sh` remains the single entry point.
+1. Add the remaining orchestration scripts (`down`, `logs`) and shared stopping workflow.
+2. Extend tests (unit + integration) as components land, ensuring `scripts/test.sh` remains the single entry point.
+3. Prepare Spark batch scaffolding + scheduler wiring (Phase 3) while open design decisions (final scoring weights, readiness delay) remain outstanding.
