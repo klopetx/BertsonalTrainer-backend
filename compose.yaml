@@ -219,7 +219,6 @@ services:
       BUSINESS_DAY_CUTOFF_HOUR: ${BUSINESS_DAY_CUTOFF_HOUR:-1}
       SCHEDULER_POLL_INTERVAL_SECONDS: ${SCHEDULER_POLL_INTERVAL_SECONDS:-300}
       DICTIONARY_PATH: /opt/app/data/reference/ordered_basque_dictionary.csv
-      DICTIONARY_PATH: /opt/app/data/reference/ordered_basque_dictionary.csv
     volumes:
       - type: bind
         source: ./data/reference

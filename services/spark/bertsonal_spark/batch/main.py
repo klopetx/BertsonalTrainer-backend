@@ -206,13 +206,12 @@ def _compute_word_and_session_scores(
     session_columns = ["session_id", "user_id", "business_date", "rhyme_id", "rhyme"]
     session_lookup = accepted_sessions_df.select(*session_columns).dropDuplicates(["session_id"])
 
+    words_for_join = words_df.drop("business_date", "user_id", "rhyme_id")
+
     joined_words = (
-        words_df.join(
-            session_lookup,
-            ["session_id", "user_id", "business_date", "rhyme_id"],
-            "inner",
-        )
+        words_for_join.join(session_lookup, "session_id", "inner")
         .filter(F.col("is_valid") & F.col("normalized_word").isNotNull())
+        .dropDuplicates(["session_id", "normalized_word"])
         .cache()
     )
 
@@ -356,6 +355,7 @@ def _ensure_gold_tables(conn) -> None:
             );
             """
         )
+    conn.commit()
 
 
 def _write_gold_tables(
@@ -453,7 +453,7 @@ def run_batch_for_date(target_date: date, *, force: bool = False, config: BatchC
     spark = build_spark_session(config.app_name)
     configure_s3(spark, config.minio_endpoint, config.minio_access_key, config.minio_secret_key)
     dictionary_counts = _load_dictionary_counts(config.dictionary_path)
-    dictionary_counts_df = _dictionary_counts_df(spark, dictionary_counts).cache()
+    dictionary_counts_df = _dictionary_counts_df(spark, dictionary_counts)
 
     try:
         sessions_df = _load_silver_sessions(spark, config, target_date)
@@ -547,7 +547,6 @@ def run_batch_for_date(target_date: date, *, force: bool = False, config: BatchC
         return True
     finally:
         spark.stop()
-        dictionary_counts_df.unpersist()
 
 
 def main(argv: Sequence[str] | None = None) -> int:
