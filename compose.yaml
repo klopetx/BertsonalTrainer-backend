@@ -215,6 +215,12 @@ services:
       BUSINESS_TIMEZONE: ${BUSINESS_TIMEZONE:-Europe/Madrid}
       BUSINESS_DAY_CUTOFF_HOUR: ${BUSINESS_DAY_CUTOFF_HOUR:-1}
       SCHEDULER_POLL_INTERVAL_SECONDS: ${SCHEDULER_POLL_INTERVAL_SECONDS:-300}
+      DICTIONARY_PATH: /opt/app/data/reference/basque_words.sample.txt
+    volumes:
+      - type: bind
+        source: ./data/reference
+        target: /opt/app/data/reference
+        read_only: true
 
 volumes:
   postgres_data: {}
