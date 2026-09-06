@@ -3,14 +3,17 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+import csv
 from datetime import date, datetime, time, timedelta
-from typing import List, Sequence
+from pathlib import Path
+from typing import Dict, List, Sequence, Tuple
 from zoneinfo import ZoneInfo
 
 import psycopg2
 from psycopg2.extras import execute_values
 from pyspark.sql import DataFrame, SparkSession, Window
 from pyspark.sql import functions as F
+from pyspark.sql import types as T
 from pyspark.sql.utils import AnalysisException
 
 from bertsonal_spark.common.spark_utils import build_spark_session, configure_s3
@@ -19,6 +22,8 @@ from bertsonal_spark.config import BatchConfig
 
 logger = logging.getLogger(__name__)
 
+MAX_DICTIONARY_SIZE = 74.0
+
 
 class CutoffNotReachedError(RuntimeError):
     """Raised when the batch is invoked before the agreed cutoff time."""
@@ -26,6 +31,39 @@ class CutoffNotReachedError(RuntimeError):
 
 def _setup_logging() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s :: %(message)s")
+
+
+def _load_dictionary_counts(path: str) -> Dict[str, int]:
+    dictionary_path = Path(path)
+    if not dictionary_path.exists():
+        raise FileNotFoundError(f"Dictionary file not found at {dictionary_path}")
+
+    counts: Dict[str, int] = {}
+    with dictionary_path.open("r", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        if not reader.fieldnames or {"Ending", "Word"}.difference(reader.fieldnames):
+            raise ValueError("Dictionary CSV must contain 'Ending' and 'Word' columns")
+        for row in reader:
+            ending = (row.get("Ending") or "").strip().lower()
+            if not ending:
+                continue
+            counts[ending] = counts.get(ending, 0) + 1
+    if not counts:
+        raise ValueError(f"Dictionary at {dictionary_path} contains no usable entries")
+    return counts
+
+
+def _dictionary_counts_df(spark: SparkSession, counts: Dict[str, int]) -> DataFrame:
+    rows = [(ending, count) for ending, count in counts.items()]
+    if not rows:
+        schema = T.StructType(
+            [
+                T.StructField("normalized_rhyme", T.StringType(), False),
+                T.StructField("dictionary_word_count", T.IntegerType(), False),
+            ]
+        )
+        return spark.createDataFrame([], schema)
+    return spark.createDataFrame(rows, ["normalized_rhyme", "dictionary_word_count"])
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -67,6 +105,18 @@ def _load_silver_sessions(spark: SparkSession, config: BatchConfig, target_date:
     )
 
 
+def _load_silver_words(spark: SparkSession, config: BatchConfig, target_date: date) -> DataFrame | None:
+    partition_path = f"{config.silver_words_path}/business_date={target_date.isoformat()}"
+    try:
+        df = spark.read.parquet(partition_path)
+    except AnalysisException:
+        logger.info("No Silver session-words found for %s (path %s)", target_date, partition_path)
+        return None
+    return df.withColumn(
+        "business_date", F.to_date(F.lit(target_date.isoformat()), format="yyyy-MM-dd")
+    )
+
+
 def _deduplicate_sessions(sessions_df: DataFrame, target_date: date) -> DataFrame:
     enriched = sessions_df.withColumn(
         "business_date", F.to_date(F.lit(target_date.isoformat()), format="yyyy-MM-dd")
@@ -83,7 +133,7 @@ def _deduplicate_sessions(sessions_df: DataFrame, target_date: date) -> DataFram
     return accepted.drop("event_rank", "user_rank")
 
 
-def _build_daily_scores_df(accepted_df: DataFrame) -> DataFrame:
+def _build_daily_scores_df(accepted_df: DataFrame, session_scores_df: DataFrame | None) -> DataFrame:
     base = accepted_df.select(
         "business_date",
         "user_id",
@@ -92,9 +142,31 @@ def _build_daily_scores_df(accepted_df: DataFrame) -> DataFrame:
         "valid_word_count",
     )
 
-    base = base.withColumn("originality_score", F.lit(None).cast("double"))
+    if session_scores_df is not None:
+        base = base.join(
+            session_scores_df.select(
+                "session_id", "daily_score", "hardness_weighted_daily_score"
+            ),
+            "session_id",
+            "left",
+        )
+    else:
+        base = base.withColumn("daily_score", F.lit(None).cast("double"))
+        base = base.withColumn("hardness_weighted_daily_score", F.lit(None).cast("double"))
+
+    base = base.withColumn(
+        "daily_score",
+        F.when(F.col("daily_score").isNull(), F.lit(0.0)).otherwise(F.col("daily_score")),
+    )
+    base = base.withColumn(
+        "hardness_weighted_daily_score",
+        F.when(F.col("hardness_weighted_daily_score").isNull(), F.col("daily_score"))
+        .otherwise(F.col("hardness_weighted_daily_score")),
+    )
+
+    base = base.withColumn("originality_score", F.col("daily_score"))
     base = base.withColumn("rhyme_difficulty", F.lit(None).cast("double"))
-    base = base.withColumn("final_score", F.col("valid_word_count").cast("double"))
+    base = base.withColumn("final_score", F.col("hardness_weighted_daily_score"))
 
     ranking_window = Window.partitionBy("business_date").orderBy(
         F.col("final_score").desc(), F.col("user_id")
@@ -123,6 +195,98 @@ def _build_rhyme_metrics_df(accepted_df: DataFrame) -> DataFrame:
     return metrics
 
 
+def _compute_word_and_session_scores(
+    accepted_sessions_df: DataFrame,
+    words_df: DataFrame,
+    dictionary_counts_df: DataFrame,
+) -> Tuple[DataFrame | None, DataFrame | None]:
+    if words_df is None or accepted_sessions_df is None:
+        return None, None
+
+    session_columns = ["session_id", "user_id", "business_date", "rhyme_id", "rhyme"]
+    session_lookup = accepted_sessions_df.select(*session_columns).dropDuplicates(["session_id"])
+
+    joined_words = (
+        words_df.join(
+            session_lookup,
+            ["session_id", "user_id", "business_date", "rhyme_id"],
+            "inner",
+        )
+        .filter(F.col("is_valid") & F.col("normalized_word").isNotNull())
+        .cache()
+    )
+
+    if joined_words.rdd.isEmpty():
+        joined_words.unpersist()
+        return None, None
+
+    word_usage = (
+        joined_words.groupBy("business_date", "normalized_word")
+        .agg(F.countDistinct("user_id").alias("user_count"))
+        .withColumn(
+            "daily_repetitions",
+            F.when(F.col("user_count") <= 1, F.lit(0)).otherwise(F.col("user_count") - 1),
+        )
+    )
+
+    rmax_df = (
+        word_usage.groupBy("business_date")
+        .agg(F.max("daily_repetitions").alias("rmax"))
+        .withColumn("rmax", F.when(F.col("rmax").isNull(), F.lit(0)).otherwise(F.col("rmax")))
+    )
+
+    word_usage = word_usage.join(rmax_df, "business_date", "left")
+    word_usage = word_usage.withColumn(
+        "daily_word_score",
+        F.when(F.col("rmax") <= 0, F.lit(1.0)).otherwise(
+            F.lit(1.0) - (F.col("daily_repetitions") / F.col("rmax")) * F.lit(0.5)
+        ),
+    )
+
+    word_metrics = joined_words.join(
+        word_usage.select(
+            "business_date", "normalized_word", "daily_repetitions", "daily_word_score"
+        ),
+        ["business_date", "normalized_word"],
+        "left",
+    )
+
+    session_scores = (
+        word_metrics.groupBy("session_id")
+        .agg(F.sum("daily_word_score").alias("daily_score"))
+        .join(session_lookup, "session_id", "left")
+        .withColumn("normalized_rhyme", F.lower(F.col("rhyme")))
+        .join(dictionary_counts_df, "normalized_rhyme", "left")
+        .withColumn(
+            "dictionary_word_count",
+            F.coalesce(F.col("dictionary_word_count"), F.lit(0)),
+        )
+    )
+
+    hardness_multiplier = F.greatest(
+        F.lit(0.0),
+        F.lit(1.0)
+        - (F.col("dictionary_word_count") / F.lit(MAX_DICTIONARY_SIZE)) * F.lit(0.6),
+    )
+    session_scores = session_scores.withColumn(
+        "hardness_weighted_daily_score", F.col("daily_score") * hardness_multiplier
+    )
+
+    session_scores = session_scores.drop("normalized_rhyme").cache()
+
+    word_metrics = word_metrics.join(
+        session_scores.select("session_id", "daily_score", "hardness_weighted_daily_score"),
+        "session_id",
+        "left",
+    ).withColumn("calculated_at", F.current_timestamp())
+
+    word_metrics = word_metrics.cache()
+
+    joined_words.unpersist()
+
+    return word_metrics, session_scores
+
+
 def _collect_rows(df: DataFrame, columns: Sequence[str]) -> List[tuple]:
     if df.rdd.isEmpty():
         return []
@@ -140,6 +304,8 @@ def _ensure_gold_tables(conn) -> None:
                 session_id UUID NOT NULL,
                 rhyme_id TEXT NOT NULL,
                 valid_word_count INTEGER NOT NULL CHECK (valid_word_count >= 0),
+                daily_score NUMERIC,
+                hardness_weighted_daily_score NUMERIC,
                 originality_score NUMERIC,
                 rhyme_difficulty NUMERIC,
                 final_score NUMERIC,
@@ -148,6 +314,32 @@ def _ensure_gold_tables(conn) -> None:
                 PRIMARY KEY (business_date, user_id),
                 UNIQUE (session_id)
             );
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS gold.session_word_metrics (
+                business_date DATE NOT NULL,
+                session_id UUID NOT NULL,
+                user_id TEXT NOT NULL,
+                rhyme_id TEXT NOT NULL,
+                normalized_word TEXT NOT NULL,
+                daily_repetitions INTEGER NOT NULL,
+                daily_word_score NUMERIC NOT NULL,
+                daily_score NUMERIC NOT NULL,
+                hardness_weighted_daily_score NUMERIC NOT NULL,
+                calculated_at TIMESTAMPTZ NOT NULL,
+                PRIMARY KEY (business_date, session_id, normalized_word)
+            );
+            """
+        )
+        cur.execute(
+            "ALTER TABLE gold.daily_scores ADD COLUMN IF NOT EXISTS daily_score NUMERIC;"
+        )
+        cur.execute(
+            """
+            ALTER TABLE gold.daily_scores
+            ADD COLUMN IF NOT EXISTS hardness_weighted_daily_score NUMERIC;
             """
         )
         cur.execute(
@@ -170,6 +362,7 @@ def _write_gold_tables(
     business_date: date,
     daily_rows: List[tuple],
     metrics_rows: List[tuple],
+    word_metric_rows: List[tuple],
     config: BatchConfig,
 ) -> None:
     conn = psycopg2.connect(
@@ -185,6 +378,10 @@ def _write_gold_tables(
             with conn.cursor() as cur:
                 cur.execute("DELETE FROM gold.daily_scores WHERE business_date = %s", (business_date,))
                 cur.execute("DELETE FROM gold.rhyme_daily_metrics WHERE business_date = %s", (business_date,))
+                cur.execute(
+                    "DELETE FROM gold.session_word_metrics WHERE business_date = %s",
+                    (business_date,),
+                )
 
                 if daily_rows:
                     execute_values(
@@ -196,6 +393,8 @@ def _write_gold_tables(
                             session_id,
                             rhyme_id,
                             valid_word_count,
+                            daily_score,
+                            hardness_weighted_daily_score,
                             originality_score,
                             rhyme_difficulty,
                             final_score,
@@ -223,6 +422,26 @@ def _write_gold_tables(
                         """,
                         metrics_rows,
                     )
+
+                if word_metric_rows:
+                    execute_values(
+                        cur,
+                        """
+                        INSERT INTO gold.session_word_metrics (
+                            business_date,
+                            session_id,
+                            user_id,
+                            rhyme_id,
+                            normalized_word,
+                            daily_repetitions,
+                            daily_word_score,
+                            daily_score,
+                            hardness_weighted_daily_score,
+                            calculated_at
+                        ) VALUES %s
+                        """,
+                        word_metric_rows,
+                    )
     finally:
         conn.close()
 
@@ -233,6 +452,8 @@ def run_batch_for_date(target_date: date, *, force: bool = False, config: BatchC
 
     spark = build_spark_session(config.app_name)
     configure_s3(spark, config.minio_endpoint, config.minio_access_key, config.minio_secret_key)
+    dictionary_counts = _load_dictionary_counts(config.dictionary_path)
+    dictionary_counts_df = _dictionary_counts_df(spark, dictionary_counts).cache()
 
     try:
         sessions_df = _load_silver_sessions(spark, config, target_date)
@@ -245,9 +466,19 @@ def run_batch_for_date(target_date: date, *, force: bool = False, config: BatchC
             deduped_df.unpersist()
             return False
 
-        daily_scores_df = _build_daily_scores_df(deduped_df).cache()
+        words_df = _load_silver_words(spark, config, target_date)
+        word_metrics_df: DataFrame | None = None
+        session_scores_df: DataFrame | None = None
+        if words_df is not None:
+            word_metrics_df, session_scores_df = _compute_word_and_session_scores(
+                deduped_df, words_df, dictionary_counts_df
+            )
+
+        daily_scores_df = _build_daily_scores_df(deduped_df, session_scores_df).cache()
         rhyme_metrics_df = _build_rhyme_metrics_df(deduped_df).cache()
         deduped_df.unpersist()
+        if session_scores_df is not None:
+            session_scores_df.unpersist()
 
         daily_rows = _collect_rows(
             daily_scores_df,
@@ -257,6 +488,8 @@ def run_batch_for_date(target_date: date, *, force: bool = False, config: BatchC
                 "session_id",
                 "rhyme_id",
                 "valid_word_count",
+                "daily_score",
+                "hardness_weighted_daily_score",
                 "originality_score",
                 "rhyme_difficulty",
                 "final_score",
@@ -277,6 +510,25 @@ def run_batch_for_date(target_date: date, *, force: bool = False, config: BatchC
                 "calculated_at",
             ],
         )
+        word_rows: List[tuple] = []
+        if word_metrics_df is not None:
+            word_rows = _collect_rows(
+                word_metrics_df,
+                [
+                    "business_date",
+                    "session_id",
+                    "user_id",
+                    "rhyme_id",
+                    "normalized_word",
+                    "daily_repetitions",
+                    "daily_word_score",
+                    "daily_score",
+                    "hardness_weighted_daily_score",
+                    "calculated_at",
+                ],
+            )
+            word_metrics_df.unpersist()
+
         daily_scores_df.unpersist()
         rhyme_metrics_df.unpersist()
 
@@ -284,16 +536,18 @@ def run_batch_for_date(target_date: date, *, force: bool = False, config: BatchC
             logger.info("No qualifying sessions for %s", target_date)
             return False
 
-        _write_gold_tables(target_date, daily_rows, metrics_rows, config)
+        _write_gold_tables(target_date, daily_rows, metrics_rows, word_rows, config)
         logger.info(
-            "Batch completed for %s (daily rows=%s, rhyme metrics=%s)",
+            "Batch completed for %s (daily rows=%s, rhyme metrics=%s, word rows=%s)",
             target_date,
             len(daily_rows),
             len(metrics_rows),
+            len(word_rows),
         )
         return True
     finally:
         spark.stop()
+        dictionary_counts_df.unpersist()
 
 
 def main(argv: Sequence[str] | None = None) -> int:

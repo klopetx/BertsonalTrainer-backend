@@ -176,6 +176,7 @@ services:
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin123}
       SILVER_SESSIONS_PATH: s3a://silver/sessions
+      SILVER_SESSION_WORDS_PATH: s3a://silver/session-words
       POSTGRES_HOST: postgres
       POSTGRES_PORT: "5432"
       POSTGRES_USER: ${POSTGRES_USER:-bertsonal}
@@ -183,6 +184,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-bertsonal}
       BUSINESS_TIMEZONE: ${BUSINESS_TIMEZONE:-Europe/Madrid}
       BUSINESS_DAY_CUTOFF_HOUR: ${BUSINESS_DAY_CUTOFF_HOUR:-1}
+      DICTIONARY_PATH: /opt/app/data/reference/ordered_basque_dictionary.csv
     volumes:
       - type: bind
         source: ./data/reference
@@ -207,6 +209,7 @@ services:
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin123}
       SILVER_SESSIONS_PATH: s3a://silver/sessions
+      SILVER_SESSION_WORDS_PATH: s3a://silver/session-words
       POSTGRES_HOST: postgres
       POSTGRES_PORT: "5432"
       POSTGRES_USER: ${POSTGRES_USER:-bertsonal}
@@ -215,6 +218,7 @@ services:
       BUSINESS_TIMEZONE: ${BUSINESS_TIMEZONE:-Europe/Madrid}
       BUSINESS_DAY_CUTOFF_HOUR: ${BUSINESS_DAY_CUTOFF_HOUR:-1}
       SCHEDULER_POLL_INTERVAL_SECONDS: ${SCHEDULER_POLL_INTERVAL_SECONDS:-300}
+      DICTIONARY_PATH: /opt/app/data/reference/ordered_basque_dictionary.csv
       DICTIONARY_PATH: /opt/app/data/reference/ordered_basque_dictionary.csv
     volumes:
       - type: bind

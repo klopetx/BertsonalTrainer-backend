@@ -33,6 +33,7 @@ class BatchConfig:
     minio_access_key: str = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
     minio_secret_key: str = os.getenv("MINIO_SECRET_KEY", "minioadmin123")
     silver_sessions_path: str = os.getenv("SILVER_SESSIONS_PATH", "s3a://silver/sessions")
+    silver_words_path: str = os.getenv("SILVER_SESSION_WORDS_PATH", "s3a://silver/session-words")
     postgres_host: str = os.getenv("POSTGRES_HOST", "postgres")
     postgres_port: int = int(os.getenv("POSTGRES_PORT", "5432"))
     postgres_user: str = os.getenv("POSTGRES_USER", "bertsonal")
@@ -40,3 +41,6 @@ class BatchConfig:
     postgres_db: str = os.getenv("POSTGRES_DB", "bertsonal")
     business_timezone: str = os.getenv("BUSINESS_TIMEZONE", "Europe/Madrid")
     business_cutoff_hour: int = int(os.getenv("BUSINESS_DAY_CUTOFF_HOUR", "1"))
+    dictionary_path: str = os.getenv(
+        "DICTIONARY_PATH", "/opt/app/data/reference/ordered_basque_dictionary.csv"
+    )

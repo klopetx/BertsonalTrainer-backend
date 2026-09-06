@@ -16,17 +16,24 @@ The Spark batch job consumes Silver (not Kafka/Bronze) and is responsible for:
 
 - Definitive technical deduplication by `event_id` and `payload_hash`.
 - Enforcing the **first accepted event wins** rule for each `user_id + business_date` using Kafka arrival ordering.
-- Calculating daily word-frequency/originality metrics.
+- Calculating daily word-frequency/originality metrics and persisting the per-word outputs in `gold.session_word_metrics`.
 - Computing rhyme difficulty from observed performance.
 - Writing `gold.daily_scores`, `gold.rhyme_daily_metrics`, `gold.weekly_rankings`, and `gold.monthly_rankings` via transactional replace-by-scope semantics.
 - Materializing daily/weekly/monthly rankings with both cumulative and average fields.
 - Preparing data for future KPIs/Metabase dashboards (while `gold.business_kpis` stays deferred).
 
-## Originality (agreed concept)
+## Originality (implemented mechanics)
 
-- Consider only valid, distinct words per session.
-- A word is more original when fewer distinct users submitted the same normalized word for the same business day/rhyme.
-- Exact scoring weights remain unresolved; batch must emit the necessary frequency statistics so the final formula can be applied once approved.
+- Consider only valid, distinct words per session (duplicates in the same session stay invalid in Silver and never reach Gold).
+- For each business date + normalized word, count distinct users and subtract one to obtain `daily_repetitions` (how many *other* users also submitted the word). When no other users submitted the word, `daily_repetitions = 0`.
+- Let `Rmax` be the maximum `daily_repetitions` observed that day. Each word receives `daily_word_score = 1 - (daily_repetitions / Rmax) * 0.5`. When `Rmax = 0`, the score defaults to `1.0` so unique words retain the best possible score.
+- A session’s `daily_score` is the sum of `daily_word_score` across all of its valid words. The batch writes this value to both `gold.session_word_metrics` (denormalized) and `gold.daily_scores`.
+
+## Hardness weighting (implemented mechanics)
+
+- For each rhyme ending, count how many dictionary entries exist in `data/reference/ordered_basque_dictionary.csv` (`EDW`).
+- The hardness multiplier is `max(0, 1 - (EDW / 74) * 0.6)`, where `74` is the largest dictionary size among the known endings.
+- `hardness_weighted_daily_score = daily_score * multiplier` and becomes the persisted `final_score` in `gold.daily_scores` (also denormalized in `gold.session_word_metrics`).
 
 ## Rhyme difficulty (agreed concept)
 

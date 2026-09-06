@@ -11,6 +11,7 @@ PostgreSQL
 `-- gold
     |-- daily_scores
     |-- rhyme_daily_metrics
+    |-- session_word_metrics
     |-- weekly_rankings
     `-- monthly_rankings
 ```
@@ -76,9 +77,11 @@ One row per accepted user and business date after definitive deduplication.
 | `session_id` | UUID | Accepted session (UNIQUE) |
 | `rhyme_id` | TEXT | Daily rhyme |
 | `valid_word_count` | INTEGER | Distinct valid words |
-| `originality_score` | NUMERIC | Nullable until formula approved |
-| `rhyme_difficulty` | NUMERIC | Nullable until transformation approved |
-| `final_score` | NUMERIC | Nullable until final scoring formula approved |
+| `daily_score` | NUMERIC | Sum of `daily_word_score` across the session |
+| `hardness_weighted_daily_score` | NUMERIC | `daily_score * (1 - (EDW/74)*0.6)` |
+| `originality_score` | NUMERIC | Mirrors `daily_score` for downstream compatibility |
+| `rhyme_difficulty` | NUMERIC | Placeholder until final weighting |
+| `final_score` | NUMERIC | Equals `hardness_weighted_daily_score` in the current MVP |
 | `rank_position` | INTEGER | Materialized daily rank |
 | `calculated_at` | TIMESTAMPTZ | Batch calculation timestamp |
 
@@ -91,6 +94,25 @@ UNIQUE (session_id)
 CREATE INDEX idx_daily_scores_date_rank
 ON gold.daily_scores (business_date, rank_position);
 ```
+
+## `gold.session_word_metrics`
+
+One row per valid, unique word that contributed to an accepted session.
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `business_date` | DATE | Partition key; part of PK |
+| `session_id` | UUID | References the accepted session |
+| `user_id` | TEXT | Denormalized for convenience |
+| `rhyme_id` | TEXT | Matches the day’s rhyme |
+| `normalized_word` | TEXT | Normalized dictionary entry |
+| `daily_repetitions` | INTEGER | Distinct other users who also submitted the word |
+| `daily_word_score` | NUMERIC | `1 - (daily_repetitions / Rmax) * 0.5`, defaults to `1.0` when `Rmax = 0` |
+| `daily_score` | NUMERIC | Session-level total (repeated for convenience) |
+| `hardness_weighted_daily_score` | NUMERIC | Session HWDS repeated for convenience |
+| `calculated_at` | TIMESTAMPTZ | Batch calculation timestamp |
+
+`Rmax` represents the maximum `daily_repetitions` observed for the business date; unique words retain the best score when no other users submitted them.
 
 ## `gold.rhyme_daily_metrics`
 
