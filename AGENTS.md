@@ -60,7 +60,7 @@ Silver -> daily Spark batch -> PostgreSQL gold.* tables -> (future) Metabase
 3. Default simulator word-count mean/stddev, event size profile, and exact error-injection percentages (empty sessions, random words, typos).
 4. Monitoring/observability tooling.
 5. Metabase dashboard scope/timing.
-6. Final availability/inspection plan for `data/reference/basque_words.txt`.
+6. Final availability/inspection plan for `data/reference/ordered_basque_dictionary.csv`.
 7. Whether any graph-based word/rhyme analysis remains in scope.
 8. Project calendar and milestone targets.
 

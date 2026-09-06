@@ -21,7 +21,7 @@ class StreamingConfig:
     postgres_password: str = os.getenv("POSTGRES_PASSWORD", "bertsonal_pw")
     postgres_db: str = os.getenv("POSTGRES_DB", "bertsonal")
     checkpoint_root: str = os.getenv("SPARK_CHECKPOINT_ROOT", "s3a://system/checkpoints/streaming")
-    dictionary_path: str = os.getenv("DICTIONARY_PATH", "/opt/app/data/reference/basque_words.sample.txt")
+    dictionary_path: str = os.getenv("DICTIONARY_PATH", "/opt/app/data/reference/ordered_basque_dictionary.csv")
     business_timezone: str = os.getenv("BUSINESS_TIMEZONE", "Europe/Madrid")
     business_cutoff_hour: int = int(os.getenv("BUSINESS_DAY_CUTOFF_HOUR", "1"))
 

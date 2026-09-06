@@ -28,7 +28,7 @@ else:
 def fixture_dictionary_path(tmp_path: Path) -> Path:
     """Copy the test dictionary into a temp path to keep tests isolated."""
 
-    src = Path(__file__).parent / "fixtures" / "basque_words.txt"
+    src = Path(__file__).parent / "fixtures" / "ordered_dictionary.csv"
     dest = tmp_path / "words.txt"
     dest.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
     return dest

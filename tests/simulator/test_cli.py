@@ -49,8 +49,8 @@ def test_cli_parses_arguments() -> None:
 
 
 def test_load_env_settings_respects_overrides(monkeypatch, tmp_path):
-    custom_dict = tmp_path / "dict.txt"
-    custom_dict.write_text("test", encoding="utf-8")
+    custom_dict = tmp_path / "dict.csv"
+    custom_dict.write_text("Ending,Word\nari,abari\n", encoding="utf-8")
 
     monkeypatch.setenv("KAFKA_BOOTSTRAP_SERVERS", "custom:1234")
     monkeypatch.setenv("KAFKA_TOPIC", "custom-topic")

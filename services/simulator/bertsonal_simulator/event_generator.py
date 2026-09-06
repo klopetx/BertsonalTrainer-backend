@@ -42,7 +42,7 @@ def _simulate_words(
         return []
 
     count = _random_word_count(rng, config.words_mean, config.words_stddev)
-    rhyme_suffix = config.rhyme[-2:] if config.rhyme else None
+    rhyme_suffix = config.rhyme
     words: List[str] = []
 
     for _ in range(count):

@@ -15,7 +15,7 @@ from .types import KafkaSettings, SimulatorConfig
 from .word_repository import WordRepository
 
 
-DEFAULT_DICT_PATH = "/opt/app/data/reference/basque_words.sample.txt"
+DEFAULT_DICT_PATH = "/opt/app/data/reference/ordered_basque_dictionary.csv"
 
 
 def _parse_date(value: str) -> date:

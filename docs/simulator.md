@@ -22,7 +22,7 @@ The simulator produces synthetic session events for the BertsonalTrainer backend
 - Allow an optional publishing delay for demo readability and near-zero delay for load tests.
 - Support valid empty sessions via a configurable empty-session probability.
 - For non-empty sessions, sample the submitted-word count from user-provided mean and standard deviation parameters. Results must be positive integers (`>= 1`); empty sessions originate only from the explicit empty-session probability.
-- Under normal generation, select words from `data/reference/basque_words.txt` so that they are compatible with the day’s rhyme.
+- Under normal generation, select words from `data/reference/ordered_basque_dictionary.csv`; the `--rhyme` CLI option must match an `Ending` value and only words tied to that ending are eligible.
 - Do not intentionally skew word selection to fabricate originality distributions.
 - Provide independent probabilities for:
   - Replacing a dictionary word with a random, non-dictionary token.
@@ -45,8 +45,8 @@ Exact option names may evolve as long as the semantics remain equivalent and the
 
 ## Dictionary reference
 
-- Runtime lexical reference: `data/reference/basque_words.txt` (mounted read-only into services that need it).
-- Tests use `tests/fixtures/basque_words.txt`, a deterministic subset that must not depend on the full dictionary.
+- Runtime lexical reference: `data/reference/ordered_basque_dictionary.csv` (mounted read-only into services that need it).
+- Tests use `tests/fixtures/ordered_dictionary.csv`, a deterministic subset that must not depend on the full dictionary.
 
 ## Output contract
 

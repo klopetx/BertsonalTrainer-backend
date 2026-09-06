@@ -119,7 +119,7 @@ services:
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       KAFKA_TOPIC: session-events
-      REFERENCE_DICT: /opt/app/data/reference/basque_words.sample.txt
+      REFERENCE_DICT: /opt/app/data/reference/ordered_basque_dictionary.csv
     depends_on:
       kafka:
         condition: service_healthy
@@ -145,7 +145,7 @@ services:
       MINIO_ENDPOINT: http://minio:9000
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin123}
-      DICTIONARY_PATH: /opt/app/data/reference/basque_words.sample.txt
+      DICTIONARY_PATH: /opt/app/data/reference/ordered_basque_dictionary.csv
       POSTGRES_HOST: postgres
       POSTGRES_PORT: "5432"
       POSTGRES_USER: ${POSTGRES_USER:-bertsonal}
@@ -215,7 +215,7 @@ services:
       BUSINESS_TIMEZONE: ${BUSINESS_TIMEZONE:-Europe/Madrid}
       BUSINESS_DAY_CUTOFF_HOUR: ${BUSINESS_DAY_CUTOFF_HOUR:-1}
       SCHEDULER_POLL_INTERVAL_SECONDS: ${SCHEDULER_POLL_INTERVAL_SECONDS:-300}
-      DICTIONARY_PATH: /opt/app/data/reference/basque_words.sample.txt
+      DICTIONARY_PATH: /opt/app/data/reference/ordered_basque_dictionary.csv
     volumes:
       - type: bind
         source: ./data/reference
