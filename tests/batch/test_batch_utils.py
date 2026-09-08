@@ -33,3 +33,13 @@ def test_cutoff_guard_blocks_before_threshold():
     before_cutoff = datetime(2026, 9, 4, 0, 30, tzinfo=ZoneInfo("UTC"))
     with pytest.raises(batch_main.CutoffNotReachedError):
         batch_main._ensure_cutoff_passed(target, cfg, force=False, now=before_cutoff)
+
+
+def test_week_start_date_is_monday():
+    # 2026-09-09 is Wednesday
+    assert batch_main._week_start_date(date(2026, 9, 9)) == date(2026, 9, 7)
+
+
+def test_month_start_and_end_dates():
+    assert batch_main._month_start_date(date(2026, 9, 9)) == date(2026, 9, 1)
+    assert batch_main._month_end_date(date(2026, 9, 9)) == date(2026, 9, 30)

@@ -29,6 +29,21 @@ class CutoffNotReachedError(RuntimeError):
     """Raised when the batch is invoked before the agreed cutoff time."""
 
 
+def _week_start_date(value: date) -> date:
+    # ISO-style week start: Monday
+    return value - timedelta(days=value.weekday())
+
+
+def _month_start_date(value: date) -> date:
+    return value.replace(day=1)
+
+
+def _month_end_date(value: date) -> date:
+    month_start = _month_start_date(value)
+    next_month = (month_start.replace(day=28) + timedelta(days=4)).replace(day=1)
+    return next_month - timedelta(days=1)
+
+
 def _setup_logging() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s :: %(message)s")
 
@@ -352,6 +367,62 @@ def _ensure_gold_tables(conn) -> None:
             """
         )
 
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS gold.weekly_rankings (
+                week_start_date DATE NOT NULL,
+                user_id TEXT NOT NULL,
+                total_score NUMERIC NOT NULL,
+                average_score NUMERIC NOT NULL,
+                days_played INTEGER NOT NULL,
+                rank_by_total INTEGER NOT NULL,
+                rank_by_average INTEGER NOT NULL,
+                calculated_at TIMESTAMPTZ NOT NULL,
+                PRIMARY KEY (week_start_date, user_id)
+            );
+            """
+        )
+        cur.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_weekly_rank_total
+            ON gold.weekly_rankings (week_start_date, rank_by_total);
+            """
+        )
+        cur.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_weekly_rank_average
+            ON gold.weekly_rankings (week_start_date, rank_by_average);
+            """
+        )
+
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS gold.monthly_rankings (
+                month_start_date DATE NOT NULL,
+                user_id TEXT NOT NULL,
+                total_score NUMERIC NOT NULL,
+                average_score NUMERIC NOT NULL,
+                days_played INTEGER NOT NULL,
+                rank_by_total INTEGER NOT NULL,
+                rank_by_average INTEGER NOT NULL,
+                calculated_at TIMESTAMPTZ NOT NULL,
+                PRIMARY KEY (month_start_date, user_id)
+            );
+            """
+        )
+        cur.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_monthly_rank_total
+            ON gold.monthly_rankings (month_start_date, rank_by_total);
+            """
+        )
+        cur.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_monthly_rank_average
+            ON gold.monthly_rankings (month_start_date, rank_by_average);
+            """
+        )
+
         # If these columns existed in earlier iterations, remove them to keep the Gold schema aligned
         # with the current scoring model (hardness is the sole difficulty factor).
         cur.execute("ALTER TABLE gold.daily_scores DROP COLUMN IF EXISTS rhyme_difficulty;")
@@ -377,6 +448,11 @@ def _write_gold_tables(
         _ensure_gold_tables(conn)
         with conn:
             with conn.cursor() as cur:
+                week_start = _week_start_date(business_date)
+                week_end = week_start + timedelta(days=6)
+                month_start = _month_start_date(business_date)
+                month_end = _month_end_date(business_date)
+
                 cur.execute("DELETE FROM gold.daily_scores WHERE business_date = %s", (business_date,))
                 cur.execute("DELETE FROM gold.rhyme_daily_metrics WHERE business_date = %s", (business_date,))
                 cur.execute(
@@ -440,6 +516,125 @@ def _write_gold_tables(
                         ) VALUES %s
                         """,
                         word_metric_rows,
+                    )
+
+                # Rankings are recomputed for the affected week/month scopes using the (possibly updated)
+                # gold.daily_scores rows now visible in this transaction.
+                cur.execute(
+                    "DELETE FROM gold.weekly_rankings WHERE week_start_date = %s",
+                    (week_start,),
+                )
+                cur.execute(
+                    "DELETE FROM gold.monthly_rankings WHERE month_start_date = %s",
+                    (month_start,),
+                )
+
+                cur.execute(
+                    """
+                    WITH per_user AS (
+                        SELECT
+                            user_id,
+                            SUM(final_score) AS total_score,
+                            AVG(final_score) AS average_score,
+                            COUNT(DISTINCT business_date) AS days_played
+                        FROM gold.daily_scores
+                        WHERE business_date BETWEEN %s AND %s
+                        GROUP BY user_id
+                    ), ranked AS (
+                        SELECT
+                            %s::date AS week_start_date,
+                            user_id,
+                            total_score,
+                            average_score,
+                            days_played,
+                            ROW_NUMBER() OVER (ORDER BY total_score DESC, user_id) AS rank_by_total,
+                            ROW_NUMBER() OVER (ORDER BY average_score DESC, user_id) AS rank_by_average
+                        FROM per_user
+                    )
+                    SELECT
+                        week_start_date,
+                        user_id,
+                        total_score,
+                        average_score,
+                        days_played,
+                        rank_by_total,
+                        rank_by_average,
+                        CURRENT_TIMESTAMP
+                    FROM ranked
+                    """,
+                    (week_start, week_end, week_start),
+                )
+                weekly_rows = cur.fetchall()
+                if weekly_rows:
+                    execute_values(
+                        cur,
+                        """
+                        INSERT INTO gold.weekly_rankings (
+                            week_start_date,
+                            user_id,
+                            total_score,
+                            average_score,
+                            days_played,
+                            rank_by_total,
+                            rank_by_average,
+                            calculated_at
+                        ) VALUES %s
+                        """,
+                        weekly_rows,
+                    )
+
+                cur.execute(
+                    """
+                    WITH per_user AS (
+                        SELECT
+                            user_id,
+                            SUM(final_score) AS total_score,
+                            AVG(final_score) AS average_score,
+                            COUNT(DISTINCT business_date) AS days_played
+                        FROM gold.daily_scores
+                        WHERE business_date BETWEEN %s AND %s
+                        GROUP BY user_id
+                    ), ranked AS (
+                        SELECT
+                            %s::date AS month_start_date,
+                            user_id,
+                            total_score,
+                            average_score,
+                            days_played,
+                            ROW_NUMBER() OVER (ORDER BY total_score DESC, user_id) AS rank_by_total,
+                            ROW_NUMBER() OVER (ORDER BY average_score DESC, user_id) AS rank_by_average
+                        FROM per_user
+                    )
+                    SELECT
+                        month_start_date,
+                        user_id,
+                        total_score,
+                        average_score,
+                        days_played,
+                        rank_by_total,
+                        rank_by_average,
+                        CURRENT_TIMESTAMP
+                    FROM ranked
+                    """,
+                    (month_start, month_end, month_start),
+                )
+                monthly_rows = cur.fetchall()
+                if monthly_rows:
+                    execute_values(
+                        cur,
+                        """
+                        INSERT INTO gold.monthly_rankings (
+                            month_start_date,
+                            user_id,
+                            total_score,
+                            average_score,
+                            days_played,
+                            rank_by_total,
+                            rank_by_average,
+                            calculated_at
+                        ) VALUES %s
+                        """,
+                        monthly_rows,
                     )
     finally:
         conn.close()
