@@ -35,3 +35,10 @@ Author: Kerman Lopez de Calle
 - **Daily batch**: `spark-batch` service reads Silver partitions, applies first-event-wins deduplication, and writes preliminary `gold.daily_scores` + `gold.rhyme_daily_metrics`. Use `batch-run.sh` for manual execution or `scheduler-up.sh` for continuous polling after the `01:00 Europe/Madrid` cutoff.
 
 Refer to `docs/dev-plan.md` for the phase-by-phase roadmap and remaining work (batch job, scheduler, observability tooling).
+
+## Acceptance Evidence
+
+Acceptance targets and evidence capture live in `docs/acceptance-criteria.md`.
+
+- Run the acceptance scripts locally to generate evidence artifacts.
+- Commit small summaries under `docs/evidence/` and keep full raw logs under `evidence/runs/` (gitignored).

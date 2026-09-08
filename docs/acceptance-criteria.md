@@ -15,7 +15,7 @@ These targets define how the BertsonalTrainer backend demonstrates functional co
 
 | Concern | SLI / measurement | Initial SLO | Applies to |
 | --- | --- | --- | --- |
-| Provisional scoring latency | `serving.provisional_scores.calculated_at - Kafka timestamp` | **p95 ≤ 5 s; p99 ≤ 10 s** | Nominal profile |
+| Provisional scoring latency | `serving.provisional_scores.calculated_at - serving.provisional_scores.kafka_timestamp` | **p95 ≤ 5 s; p99 ≤ 10 s** | Nominal profile |
 | Bronze ingestion completeness | Kafka deliveries successfully processed vs. Bronze records | **100%** | Functional/integration tests |
 | Provisional idempotency | Provisional rows per logical event | **Exactly 1** | Duplicate-delivery tests |
 | Accelerated-load throughput | Fully processed session events / elapsed seconds | **≥ 100 events/s average** | 60,000-user profile |

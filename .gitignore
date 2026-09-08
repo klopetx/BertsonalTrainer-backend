@@ -11,3 +11,6 @@ venv/
 
 # OS
 .DS_Store
+
+# Acceptance evidence (raw artifacts)
+evidence/runs/

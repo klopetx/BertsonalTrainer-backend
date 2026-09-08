@@ -415,6 +415,7 @@ def _write_provisional_scores(batch_df: DataFrame, batch_id: int, config: Stream
             "business_date",
             "rhyme_id",
             "valid_word_count",
+            "kafka_timestamp",
             "processed_at",
         )
         .where(F.col("event_id").isNotNull())
@@ -435,6 +436,7 @@ def _write_provisional_scores(batch_df: DataFrame, batch_id: int, config: Stream
                 row.rhyme_id,
                 int(row.valid_word_count or 0),
                 int(row.valid_word_count or 0),
+                row.kafka_timestamp,
                 row.processed_at,
             )
         )
@@ -465,6 +467,7 @@ def _write_provisional_scores(batch_df: DataFrame, batch_id: int, config: Stream
                         rhyme_id,
                         valid_word_count,
                         provisional_score,
+                        kafka_timestamp,
                         calculated_at
                     ) VALUES %s
                     ON CONFLICT (event_id) DO NOTHING
@@ -488,10 +491,16 @@ def _ensure_provisional_table(conn) -> None:
                 rhyme_id TEXT NOT NULL,
                 valid_word_count INTEGER NOT NULL CHECK (valid_word_count >= 0),
                 provisional_score INTEGER NOT NULL CHECK (provisional_score >= 0),
+                kafka_timestamp TIMESTAMPTZ,
                 calculated_at TIMESTAMPTZ NOT NULL,
                 UNIQUE (user_id, business_date)
             );
             """
+        )
+
+        # Forward-only schema evolution: keep latency computation easy in SQL without backfills.
+        cur.execute(
+            "ALTER TABLE serving.provisional_scores ADD COLUMN IF NOT EXISTS kafka_timestamp TIMESTAMPTZ;"
         )
         cur.execute(
             """

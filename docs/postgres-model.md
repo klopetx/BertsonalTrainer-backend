@@ -31,6 +31,7 @@ One row per accepted session during streaming.
 | `rhyme_id` | TEXT | Daily rhyme identifier |
 | `valid_word_count` | INTEGER | Distinct valid words (>= 0) |
 | `provisional_score` | INTEGER | Equals `valid_word_count` in v1 |
+| `kafka_timestamp` | TIMESTAMPTZ | Kafka arrival timestamp for latency calculations; nullable for forward-only migrations |
 | `calculated_at` | TIMESTAMPTZ | Streaming calculation timestamp |
 
 Constraints:
