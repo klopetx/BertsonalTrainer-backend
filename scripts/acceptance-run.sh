@@ -78,7 +78,8 @@ echo "[acceptance-run] Measuring" >&2
 
 throughput="0"
 if [ "$ingest_seconds" -gt 0 ]; then
-  throughput=$((USERS / ingest_seconds))
+  # Keep a readable float for small demo runs.
+  throughput=$(awk -v u="$USERS" -v s="$ingest_seconds" 'BEGIN { printf("%.2f", u / s) }')
 fi
 
 sha=$(git rev-parse --short HEAD)
@@ -87,18 +88,18 @@ summary_file="$summary_dir/${run_id}_${PROFILE}_${BUSINESS_DATE}.md"
 cat > "$summary_file" <<EOF
 ## Acceptance Run
 
-- run_id: \\$run_id
-- commit: \\$sha
-- profile: \\$PROFILE
-- users: \\$USERS
-- business_date: \\$BUSINESS_DATE
-- ingest_seconds: \\$ingest_seconds
-- approx_throughput_events_per_second: \\$throughput
-- batch_seconds: \\$batch_seconds
+- run_id: $run_id
+- commit: $sha
+- profile: $PROFILE
+- users: $USERS
+- business_date: $BUSINESS_DATE
+- ingest_seconds: $ingest_seconds
+- approx_throughput_events_per_second: $throughput
+- batch_seconds: $batch_seconds
 
 ### Measurements
 
-See: \\`evidence/runs/${run_id}_${PROFILE}_${BUSINESS_DATE}/measure.out\\`
+Raw measurements file: evidence/runs/${run_id}_${PROFILE}_${BUSINESS_DATE}/measure.out
 EOF
 
 echo "[acceptance-run] Wrote summary: $summary_file" >&2

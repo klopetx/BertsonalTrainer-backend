@@ -24,7 +24,7 @@ fi
 
 echo "[acceptance-measure] Measuring for business_date=${BUSINESS_DATE}" >&2
 
-$COMPOSE_BIN exec -T postgres psql -U bertsonal -d bertsonal -v ON_ERROR_STOP=1 -c "
+$COMPOSE_BIN exec -T postgres psql -U bertsonal -d bertsonal -v ON_ERROR_STOP=1 <<SQL
 \echo '--- provisional completeness'
 SELECT COUNT(*) AS provisional_rows
 FROM serving.provisional_scores
@@ -60,4 +60,4 @@ SELECT ms.month_start, COUNT(*) AS gold_monthly_rows
 FROM ms
 LEFT JOIN gold.monthly_rankings r ON r.month_start_date = ms.month_start
 GROUP BY ms.month_start;
-" 
+SQL
