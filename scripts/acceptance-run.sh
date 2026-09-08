@@ -2,7 +2,7 @@
 set -euo pipefail
 
 if [ $# -lt 8 ]; then
-  echo "Usage: $0 --profile <demo|dev|nominal|load> --business-date YYYY-MM-DD --rhyme <text> --rhyme-id <id> [--users N] [--seed N] [--force]" >&2
+  echo "Usage: $0 --profile <demo|dev|nominal|load> --business-date YYYY-MM-DD --rhyme <text> --rhyme-id <id> [--users N] [--seed N] [--delay-ms N] [--force]" >&2
   exit 1
 fi
 
@@ -13,6 +13,7 @@ RHYME_ID=""
 SEED="42"
 FORCE_BATCH="false"
 USERS_OVERRIDE=""
+DELAY_MS="0"
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -22,6 +23,7 @@ while [ $# -gt 0 ]; do
     --rhyme-id) RHYME_ID="$2"; shift 2 ;;
     --users) USERS_OVERRIDE="$2"; shift 2 ;;
     --seed) SEED="$2"; shift 2 ;;
+    --delay-ms) DELAY_MS="$2"; shift 2 ;;
     --force) FORCE_BATCH="true"; shift 1 ;;
     *) echo "Unknown arg: $1" >&2; exit 2 ;;
   esac
@@ -60,13 +62,14 @@ echo "[acceptance-run] Starting infra + streaming" >&2
 ./scripts/streaming-up.sh | tee "$raw_dir/streaming-up.log"
 
 start=$(date +%s)
-echo "[acceptance-run] Simulating profile=$PROFILE users=$USERS date=$BUSINESS_DATE" >&2
+echo "[acceptance-run] Simulating profile=$PROFILE users=$USERS date=$BUSINESS_DATE delay_ms=$DELAY_MS" >&2
 ./scripts/simulate.sh \
   --users "$USERS" \
   --business-date "$BUSINESS_DATE" \
   --rhyme "$RHYME" \
   --rhyme-id "$RHYME_ID" \
-  --seed "$SEED" | tee "$raw_dir/simulate.log"
+  --seed "$SEED" \
+  --delay-ms "$DELAY_MS" | tee "$raw_dir/simulate.log"
 
 ./scripts/acceptance-wait.sh "$BUSINESS_DATE" "$USERS" 1800 5 | tee "$raw_dir/wait.log"
 
@@ -103,6 +106,7 @@ cat > "$summary_file" <<EOF
 - profile: $PROFILE
 - users: $USERS
 - business_date: $BUSINESS_DATE
+- delay_ms: $DELAY_MS
 - ingest_seconds: $ingest_seconds
 - approx_throughput_events_per_second: $throughput
 - batch_seconds: $batch_seconds
