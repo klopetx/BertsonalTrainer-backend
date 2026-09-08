@@ -14,7 +14,7 @@ Python simulator -> Kafka -> Spark Structured Streaming
 Silver -> daily Spark batch -> PostgreSQL gold.* tables -> (future) Metabase
 ```
 - Bronze remains the long-term audit log; Silver is structured but may contain technical duplicates.
-- Daily Spark batch enforces definitive deduplication, originality/rhyme-difficulty inputs, and writes Gold tables.
+- Daily Spark batch enforces definitive deduplication, originality inputs, and applies hardness (difficulty) weighting before writing Gold tables.
 
 ## Core Invariants (do not break)
 - Python 3.10 only; local envs use `python -m venv` and no alternate package managers.
@@ -29,12 +29,12 @@ Silver -> daily Spark batch -> PostgreSQL gold.* tables -> (future) Metabase
 - Daily batch performs definitive deduplication before Gold and replaces scopes transactionally.
 - No Spark watermarking in the MVP; persistent checkpoints in MinIO (`system/checkpoints/streaming/<query-name>/`) are mandatory.
 - The same normalization/validation logic must be reused everywhere; never pre-normalize simulator output.
-- Do not invent the final scoring formula, rhyme-difficulty weights, or simulator default parameters without user approval.
+- Do not invent new scoring weights/formulas beyond the currently documented model, or simulator default parameters, without user approval.
 - Never make material architecture/scope decisions silently; escalate open decisions when relevant.
 
 ## Priorities
 - **P0:** Local Compose infra, simulator, Kafka ingestion, Structured Streaming, Bronze/Silver, provisional scoring, serving table, core tests.
-- **P1:** Daily Spark batch, originality + rhyme-difficulty metrics, PostgreSQL Gold, daily/weekly/monthly rankings, final scoring once approved, testing/CI.
+- **P1:** Daily Spark batch, originality + hardness weighting, PostgreSQL Gold, daily/weekly/monthly rankings, testing/CI.
 - **P2:** Quarantine dataset, extended data-quality/observability, Metabase dashboards, `rebuild_silver_from_bronze`, other nice-to-haves.
 
 ## Repository & Runtime Conventions
@@ -55,7 +55,7 @@ Silver -> daily Spark batch -> PostgreSQL gold.* tables -> (future) Metabase
 - `./scripts/down.sh` — stop services without deleting persistent volumes.
 
 ## Open Decisions (do not resolve silently)
-1. Final scoring formula and weights (originality + rhyme difficulty contributions).
+1. Scheduler post-cutoff readiness delay/check.
 2. Exact post-cutoff readiness delay/check before the scheduler launches the batch.
 3. Default simulator word-count mean/stddev, event size profile, and exact error-injection percentages (empty sessions, random words, typos).
 4. Monitoring/observability tooling.
@@ -69,7 +69,7 @@ Silver -> daily Spark batch -> PostgreSQL gold.* tables -> (future) Metabase
 - Kafka topology, `session-events` contract, technical retries, late events → `docs/kafka-contract.md`.
 - Bronze/Silver schemas, normalization/validation flow, checkpoint namespace, quarantine plan → `docs/medallion-model.md`.
 - PostgreSQL serving + Gold schemas, constraints, replace-by-scope strategy → `docs/postgres-model.md`.
-- Business-day cutoff, batch responsibilities, originality/rhyme-difficulty metrics, rankings, cron rules → `docs/batch-and-scoring.md`.
+- Business-day cutoff, batch responsibilities, originality + hardness weighting, rankings, cron rules → `docs/batch-and-scoring.md`.
 - Simulator behavior, workload profiles, CLI parameters, dictionary references → `docs/simulator.md`.
 - SMART objectives, SLO/SLI targets, measurement evidence → `docs/acceptance-criteria.md`.
 - Key rationale and historical decisions → `docs/decisions.md`.

@@ -76,7 +76,7 @@ Rules:
 - Preserve original ordering using `word_index` so duplicates remain traceable.
 - Only the first occurrence of a normalized valid word per session can be valid; later occurrences are marked `duplicate_in_session`.
 - `normalized_word` retains accents/diacritics; do not strip language-specific characters.
-- Derived metrics such as originality, rhyme difficulty, or final score do not belong in Silver.
+- Derived metrics such as originality, hardness weighting, or final score do not belong in Silver.
 
 ## Normalization and validation flow
 

@@ -18,7 +18,7 @@ This log summarizes the most important decisions recorded in `AGENTS.md`, along 
 
 - **One Kafka message per completed session.** Simplifies ingestion reasoning and aligns simulator output with downstream idempotency guarantees.
 - **First accepted event wins.** Deterministic ordering (single Kafka partition keyed by `user_id`) allows the system to ignore conflicting later events while preserving technical retries.
-- **Separate provisional and final scores.** Streaming writes provisional results quickly, while the batch recomputes final scores with originality and rhyme-difficulty context. Keeping them separate preserves auditability.
+- **Separate provisional and final scores.** Streaming writes provisional results quickly, while the batch recomputes final scores with originality and hardness context. Keeping them separate preserves auditability.
 - **Gold replace-by-scope writes.** Transactions delete and re-insert each affected scope (day/week/month) so reprocessing cannot leave stale rows or duplicate rankings.
 - **Business-day cutoff with 1-hour grace.** Aligns with the product’s Europe/Madrid context and keeps late-arriving sessions predictable. Late events stay in Bronze but may be classified as `LATE_EVENT` elsewhere.
 - **Consistent normalization/validation rules.** Streaming and batch must share the same logic so provisional and final scoring stay aligned.

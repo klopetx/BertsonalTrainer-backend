@@ -17,7 +17,6 @@ The Spark batch job consumes Silver (not Kafka/Bronze) and is responsible for:
 - Definitive technical deduplication by `event_id` and `payload_hash`.
 - Enforcing the **first accepted event wins** rule for each `user_id + business_date` using Kafka arrival ordering.
 - Calculating daily word-frequency/originality metrics and persisting the per-word outputs in `gold.session_word_metrics`.
-- Computing rhyme difficulty from observed performance.
 - Writing `gold.daily_scores`, `gold.rhyme_daily_metrics`, `gold.weekly_rankings`, and `gold.monthly_rankings` via transactional replace-by-scope semantics.
 - Materializing daily/weekly/monthly rankings with both cumulative and average fields.
 - Preparing data for future KPIs/Metabase dashboards (while `gold.business_kpis` stays deferred).
@@ -35,16 +34,17 @@ The Spark batch job consumes Silver (not Kafka/Bronze) and is responsible for:
 - The hardness multiplier is `max(0, 1 - (EDW / 74) * 0.6)`, where `74` is the largest dictionary size among the known endings.
 - `hardness_weighted_daily_score = daily_score * multiplier` and becomes the persisted `final_score` in `gold.daily_scores` (also denormalized in `gold.session_word_metrics`).
 
-## Rhyme difficulty (agreed concept)
+## Scoring model (current)
 
-```
-average_valid_words_per_session =
-    total distinct valid words contributed across sessions
-    / total completed sessions (including zero-valid-word sessions)
-```
+The current scoring model considers:
 
-- Lower averages indicate harder rhymes; higher averages indicate easier rhymes.
-- The eventual transformation from this metric to a scoring weight is still pending approval.
+- Number of valid distinct words (via the sum of per-word contributions)
+- Originality (words repeated across users are down-weighted via `daily_word_score`)
+- Rhyme difficulty via **hardness** (dictionary-size-based multiplier)
+
+`final_score` is currently defined as:
+
+`final_score = hardness_weighted_daily_score = daily_score * hardness_multiplier`
 
 ## Rankings
 
@@ -52,10 +52,9 @@ average_valid_words_per_session =
 - Weekly rankings use `week_start_date` = Monday (ISO-style) and store `total_score`, `average_score`, `days_played`, `rank_by_total`, and `rank_by_average`. Days without participation are excluded from the denominator when computing averages.
 - Monthly rankings use `month_start_date` = first calendar day of the month and store the same cumulative/average fields plus rank columns.
 
-## Final scoring formula (open decision)
+## Future scoring changes
 
-- Do **not** invent weights or mathematical combinations until the user approves a final formula.
-- The batch must remain ready to incorporate originality and rhyme-difficulty factors once the formula is defined.
+- Any change to the scoring formula (weights, additional factors, or use of observed-performance difficulty) must be explicitly approved and documented.
 
 ## Cron scheduling and manual controls
 

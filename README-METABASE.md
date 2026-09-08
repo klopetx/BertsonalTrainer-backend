@@ -169,5 +169,4 @@ Then connect Metabase using `metabase_ro` instead of `bertsonal`.
 In the current MVP implementation:
 
 - `final_score` equals `hardness_weighted_daily_score`.
-- `rhyme_difficulty` is still a placeholder (NULL) until the final scoring
-  formula is approved.
+- No separate `rhyme_difficulty` column: rhyme difficulty is modeled via hardness (dictionary-size multiplier).

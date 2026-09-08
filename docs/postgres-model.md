@@ -80,7 +80,6 @@ One row per accepted user and business date after definitive deduplication.
 | `daily_score` | NUMERIC | Sum of `daily_word_score` across the session |
 | `hardness_weighted_daily_score` | NUMERIC | `daily_score * (1 - (EDW/74)*0.6)` |
 | `originality_score` | NUMERIC | Mirrors `daily_score` for downstream compatibility |
-| `rhyme_difficulty` | NUMERIC | Placeholder until final weighting |
 | `final_score` | NUMERIC | Equals `hardness_weighted_daily_score` in the current MVP |
 | `rank_position` | INTEGER | Materialized daily rank |
 | `calculated_at` | TIMESTAMPTZ | Batch calculation timestamp |
@@ -125,8 +124,7 @@ One row per business day, enforcing the rule that all users share the same rhyme
 | `rhyme` | TEXT | Rhyme text/suffix |
 | `participants` | INTEGER | Accepted sessions, including empty ones |
 | `total_valid_words` | INTEGER | Sum of distinct valid words across sessions |
-| `average_valid_words_per_session` | NUMERIC | Source metric for difficulty |
-| `rhyme_difficulty` | NUMERIC | Derived metric; nullable until formula approved |
+| `average_valid_words_per_session` | NUMERIC | Informational metric (not used for scoring in the current model) |
 | `calculated_at` | TIMESTAMPTZ | Batch calculation timestamp |
 
 ## `gold.weekly_rankings`

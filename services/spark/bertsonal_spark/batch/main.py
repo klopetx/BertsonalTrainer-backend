@@ -165,7 +165,6 @@ def _build_daily_scores_df(accepted_df: DataFrame, session_scores_df: DataFrame 
     )
 
     base = base.withColumn("originality_score", F.col("daily_score"))
-    base = base.withColumn("rhyme_difficulty", F.lit(None).cast("double"))
     base = base.withColumn("final_score", F.col("hardness_weighted_daily_score"))
 
     ranking_window = Window.partitionBy("business_date").orderBy(
@@ -189,7 +188,6 @@ def _build_rhyme_metrics_df(accepted_df: DataFrame) -> DataFrame:
                 / F.when(F.count("*") == 0, F.lit(1)).otherwise(F.count("*"))
             ).alias("average_valid_words_per_session"),
         )
-        .withColumn("rhyme_difficulty", F.lit(None).cast("double"))
         .withColumn("calculated_at", F.current_timestamp())
     )
     return metrics
@@ -306,7 +304,6 @@ def _ensure_gold_tables(conn) -> None:
                 daily_score NUMERIC,
                 hardness_weighted_daily_score NUMERIC,
                 originality_score NUMERIC,
-                rhyme_difficulty NUMERIC,
                 final_score NUMERIC,
                 rank_position INTEGER,
                 calculated_at TIMESTAMPTZ NOT NULL,
@@ -350,11 +347,15 @@ def _ensure_gold_tables(conn) -> None:
                 participants INTEGER NOT NULL,
                 total_valid_words INTEGER NOT NULL,
                 average_valid_words_per_session NUMERIC NOT NULL,
-                rhyme_difficulty NUMERIC,
                 calculated_at TIMESTAMPTZ NOT NULL
             );
             """
         )
+
+        # If these columns existed in earlier iterations, remove them to keep the Gold schema aligned
+        # with the current scoring model (hardness is the sole difficulty factor).
+        cur.execute("ALTER TABLE gold.daily_scores DROP COLUMN IF EXISTS rhyme_difficulty;")
+        cur.execute("ALTER TABLE gold.rhyme_daily_metrics DROP COLUMN IF EXISTS rhyme_difficulty;")
     conn.commit()
 
 
@@ -396,7 +397,6 @@ def _write_gold_tables(
                             daily_score,
                             hardness_weighted_daily_score,
                             originality_score,
-                            rhyme_difficulty,
                             final_score,
                             rank_position,
                             calculated_at
@@ -416,7 +416,6 @@ def _write_gold_tables(
                             participants,
                             total_valid_words,
                             average_valid_words_per_session,
-                            rhyme_difficulty,
                             calculated_at
                         ) VALUES %s
                         """,
@@ -491,7 +490,6 @@ def run_batch_for_date(target_date: date, *, force: bool = False, config: BatchC
                 "daily_score",
                 "hardness_weighted_daily_score",
                 "originality_score",
-                "rhyme_difficulty",
                 "final_score",
                 "rank_position",
                 "calculated_at",
@@ -506,7 +504,6 @@ def run_batch_for_date(target_date: date, *, force: bool = False, config: BatchC
                 "participants",
                 "total_valid_words",
                 "average_valid_words_per_session",
-                "rhyme_difficulty",
                 "calculated_at",
             ],
         )

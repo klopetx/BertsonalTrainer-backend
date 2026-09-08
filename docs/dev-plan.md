@@ -41,7 +41,7 @@ This living document breaks down the BertsonalTrainer backend build into sequenc
 **Goal:** Deterministic Gold tables and cron automation.
 
 ### Deliverables
-1. [🟡] Spark batch job (`services/spark/batch`) now ingests Silver partitions, applies first-event-wins deduplication, and populates `gold.daily_scores` + `gold.rhyme_daily_metrics`. Originality weights, rhyme difficulty scoring, and rankings remain TODO.
+1. [🟡] Spark batch job (`services/spark/batch`) now ingests Silver partitions, applies first-event-wins deduplication, and populates `gold.daily_scores` + `gold.rhyme_daily_metrics`. Rankings remain TODO.
 2. [🟡] Scheduler service (`services/spark/scheduler`) reuses the Spark image and polls post-cutoff; readiness delay rules still open.
 3. [x] Script wrappers: `./scripts/batch-run.sh --business-date YYYY-MM-DD [--force]` and `./scripts/scheduler-up.sh` enable manual and continuous runs.
 4. [🟡] Tests: basic cutoff/unit coverage lands in `tests/batch/`; end-to-end replace-by-scope verification pending future scoring work.
