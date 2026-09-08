@@ -2,7 +2,7 @@
 set -euo pipefail
 
 if [ $# -lt 8 ]; then
-  echo "Usage: $0 --profile <demo|dev|nominal|load> --business-date YYYY-MM-DD --rhyme <text> --rhyme-id <id> [--seed N] [--force]" >&2
+  echo "Usage: $0 --profile <demo|dev|nominal|load> --business-date YYYY-MM-DD --rhyme <text> --rhyme-id <id> [--users N] [--seed N] [--force]" >&2
   exit 1
 fi
 
@@ -12,6 +12,7 @@ RHYME=""
 RHYME_ID=""
 SEED="42"
 FORCE_BATCH="false"
+USERS_OVERRIDE=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -19,6 +20,7 @@ while [ $# -gt 0 ]; do
     --business-date) BUSINESS_DATE="$2"; shift 2 ;;
     --rhyme) RHYME="$2"; shift 2 ;;
     --rhyme-id) RHYME_ID="$2"; shift 2 ;;
+    --users) USERS_OVERRIDE="$2"; shift 2 ;;
     --seed) SEED="$2"; shift 2 ;;
     --force) FORCE_BATCH="true"; shift 1 ;;
     *) echo "Unknown arg: $1" >&2; exit 2 ;;
@@ -37,6 +39,14 @@ case "$PROFILE" in
   load) USERS=60000 ;;
   *) echo "Invalid profile: $PROFILE" >&2; exit 2 ;;
 esac
+
+if [ -n "$USERS_OVERRIDE" ]; then
+  if ! [[ "$USERS_OVERRIDE" =~ ^[0-9]+$ ]]; then
+    echo "Invalid --users value: $USERS_OVERRIDE" >&2
+    exit 2
+  fi
+  USERS="$USERS_OVERRIDE"
+fi
 
 ROOT_DIR=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT_DIR"
