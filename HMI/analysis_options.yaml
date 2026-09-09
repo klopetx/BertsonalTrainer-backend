@@ -1,0 +1,11 @@
+analyzer:
+  exclude:
+    - build/**
+    - web/**
+    - windows/**
+include: package:flutter_lints/flutter.yaml
+
+linter:
+  rules:
+    # MVP: keep defaults; tighten later as needed.
+    avoid_print: true

@@ -14,3 +14,12 @@ venv/
 
 # Acceptance evidence (raw artifacts)
 evidence/runs/
+
+# Flutter (HMI only): ignore generated artifacts and IDE noise
+HMI/.dart_tool/
+HMI/build/
+HMI/.idea/
+HMI/*.iml
+HMI/.flutter-plugins
+HMI/.flutter-plugins-dependencies
+HMI/.packages
