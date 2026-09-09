@@ -23,7 +23,7 @@ class GameScreen extends StatefulWidget {
 
 class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateMixin {
   static const int _gameSeconds = 60;
-  static const String _rhymePrefix = 'Egunerko errima...';
+  static const String _rhymePrefix = 'Eguneko errima...';
   static const String _rhymeSuffixMvp = '-ina';
 
   final TextEditingController _playerController = TextEditingController();
