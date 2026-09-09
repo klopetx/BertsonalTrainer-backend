@@ -26,9 +26,10 @@ class WordStrip extends StatelessWidget {
         scrollDirection: Axis.horizontal,
         child: Row(
           children: [
-            for (final w in words) ...[
+            for (int i = 0; i < words.length; i++) ...[
               Chip(
-                label: Text(w),
+                label: Text(words[i]),
+                backgroundColor: _chipColor(i),
                 visualDensity: VisualDensity.compact,
               ),
               const SizedBox(width: 8),
@@ -37,5 +38,11 @@ class WordStrip extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Color _chipColor(int index) {
+    final double hue = (index * 47) % 360;
+    final hsl = HSLColor.fromAHSL(1.0, hue, 0.55, 0.82);
+    return hsl.toColor().withValues(alpha: 0.85);
   }
 }

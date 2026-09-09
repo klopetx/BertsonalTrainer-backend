@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import 'widgets/orbit_words.dart';
 import 'widgets/timer_ring.dart';
 import 'widgets/word_strip.dart';
 
@@ -22,7 +23,7 @@ class GameScreen extends StatefulWidget {
 
 class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateMixin {
   static const int _gameSeconds = 60;
-  static const String _rhymePrefix = 'Eguneko errima...';
+  static const String _rhymePrefix = 'Egunerko errima...';
   static const String _rhymeSuffixMvp = '-ina';
 
   final TextEditingController _playerController = TextEditingController();
@@ -39,6 +40,11 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
   @override
   void initState() {
     super.initState();
+    _playerController.addListener(() {
+      // Enables/disables the Jokatu button.
+      if (!mounted) return;
+      setState(() {});
+    });
     _roundController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: _gameSeconds),
@@ -117,6 +123,18 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
     _wordFocusNode.unfocus();
   }
 
+  void _resetToIdle() {
+    _countdownTimer?.cancel();
+    _roundController.stop();
+    _roundController.value = 1.0;
+    setState(() {
+      _phase = GamePhase.idle;
+      _countdownValue = 3;
+      _words.clear();
+      _wordController.clear();
+    });
+  }
+
   void _submitWord(String raw) {
     if (_phase != GamePhase.running) return;
     final String word = raw.trim();
@@ -152,8 +170,10 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
           builder: (context, _) {
             final bool showHeader =
                 _phase == GamePhase.running || _phase == GamePhase.finished;
+            final bool showPlayerName = _phase != GamePhase.idle;
             final int remaining = _remainingSeconds();
             final double progress = _roundController.value;
+            final String playerName = _playerController.text.trim();
 
             return Padding(
               padding: const EdgeInsets.all(20),
@@ -162,13 +182,40 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
                 children: [
                   // Header
                   SizedBox(
-                    height: 56,
-                    child: showHeader
-                        ? _RhymeHeader(
-                            prefix: _rhymePrefix,
-                            suffix: _rhymeSuffixMvp,
-                          )
-                        : null,
+                    height: 120,
+                    child: Stack(
+                      children: [
+                        if (showHeader)
+                          const Align(
+                            alignment: Alignment.center,
+                            child: _RhymeHeader(
+                              prefix: _rhymePrefix,
+                              suffix: _rhymeSuffixMvp,
+                            ),
+                          ),
+                        if (showPlayerName && playerName.isNotEmpty)
+                          Align(
+                            alignment: Alignment.topRight,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: theme.colorScheme.surfaceContainerHighest,
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                playerName,
+                                style: theme.textTheme.labelLarge?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 16),
 
@@ -199,7 +246,7 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
                     SizedBox(
                       height: 48,
                       child: ElevatedButton(
-                        onPressed: _phase == GamePhase.idle ? _startCountdown : null,
+                        onPressed: playerName.isEmpty ? null : _startCountdown,
                         child: const Text('Jokatu'),
                       ),
                     ),
@@ -217,6 +264,16 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
                     ),
                     const SizedBox(height: 12),
                     WordStrip(words: _words),
+                    if (_phase == GamePhase.finished) ...[
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        height: 48,
+                        child: OutlinedButton(
+                          onPressed: _resetToIdle,
+                          child: const Text('Hasierara joan'),
+                        ),
+                      ),
+                    ],
                   ],
                 ],
               ),
@@ -270,6 +327,10 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
                 strokeWidth: 14,
               ),
             ),
+            OrbitWords(
+              words: _words,
+              radius: 140,
+            ),
             Text(
               '${finished ? 0 : remaining}',
               style: theme.textTheme.displayLarge?.copyWith(
@@ -305,26 +366,26 @@ class _RhymeHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Wrap(
-        crossAxisAlignment: WrapCrossAlignment.center,
-        spacing: 10,
-        children: [
-          Text(
-            prefix,
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w500,
-            ),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          prefix,
+          textAlign: TextAlign.center,
+          style: theme.textTheme.headlineMedium?.copyWith(
+            fontWeight: FontWeight.w800,
           ),
-          Text(
-            suffix,
-            style: theme.textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.w800,
-            ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          suffix,
+          textAlign: TextAlign.center,
+          style: theme.textTheme.displaySmall?.copyWith(
+            fontWeight: FontWeight.w900,
+            decoration: TextDecoration.underline,
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

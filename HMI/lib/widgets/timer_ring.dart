@@ -54,7 +54,7 @@ class _TimerRingPainter extends CustomPainter {
       ..strokeWidth = strokeWidth;
 
     final Paint fg = Paint()
-      ..color = foregroundColor.withOpacity(0.85)
+      ..color = foregroundColor.withValues(alpha: 0.85)
       ..style = PaintingStyle.stroke
       ..strokeWidth = strokeWidth
       ..strokeCap = StrokeCap.round;
@@ -64,7 +64,7 @@ class _TimerRingPainter extends CustomPainter {
 
     // Foreground remaining arc (shaded) decreasing over time.
     final Rect rect = Rect.fromCircle(center: center, radius: radius);
-    final double startAngle = -math.pi / 2;
+    const double startAngle = -math.pi / 2;
     final double sweep = (2 * math.pi) * progress;
     canvas.drawArc(rect, startAngle, sweep, false, fg);
   }
