@@ -35,7 +35,7 @@ Los logs brutos de cada ejecución (`measure.out`) se guardan en `evidence/runs/
 3. **SMART-3 — Ruta analítica diaria (P1):** Silver → batch Spark → PostgreSQL Gold, incluyendo métricas diarias de rima, métricas de originalidad, ponderación de dureza (dificultad) y rankings diario/semanal/mensual con reproceso reproducible e idempotente. *Logrado:* implementado y medido por `scripts/acceptance-measure.sh`.
 4. **SMART-4 — Validación de escala local (P1):** validar y documentar cuatro perfiles — 20 usuarios/día (demo), 500 (desarrollo), 1.000 (nominal), 60.000 (prueba de carga) — registrando latencia, throughput, tiempo total de procesado y observaciones de recursos. *Logrado:* los 4 perfiles tienen evidencia registrada.
 5. **SMART-5 — Demo manual reproducible (pre-entrega):** el flujo guionizado `simular mensajes → observar resultados de streaming → ejecutar batch forzado → inspeccionar Gold` se completa sin esperar tiempo de calendario real. *Logrado:* 88 s ≤ 3 min.
-6. **SMART-6 — Calidad de ingeniería (pre-entrega):** instrucciones reproducibles de montaje local, tests unitarios/integración significativos y CI que ejecute las comprobaciones automáticas. *Parcial:* setup reproducible y tests sí; la CI aún no existe (no hay `.github/workflows`).
+6. **SMART-6 — Calidad de ingeniería (pre-entrega):** instrucciones reproducibles de montaje local, tests unitarios/integración significativos y CI que ejecute las comprobaciones automáticas. *Logrado:* setup reproducible, suite de tests y CI en GitHub Actions (`.github/workflows/ci.yml`: Python 3.11 + Java 17 + servicio de PostgreSQL 15; ejecuta `./scripts/test.sh`).
 
 ## Fórmulas del modelo de puntuación
 
