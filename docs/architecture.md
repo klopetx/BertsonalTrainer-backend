@@ -16,10 +16,10 @@ The system follows a lambda-style flow: a Python simulator publishes completed-s
 
 ## Python runtime and container constraints
 
-- All custom Python code (simulator, Spark helpers, tooling) targets Python **3.10** only.
+- All custom Python code (simulator, Spark helpers, tooling) targets Python **3.11** only.
 - Local development environments use `python -m venv`; never switch package managers without explicit approval.
 - The application is container-first: services run inside Compose rather than on the host Python install.
-- Keep runtime images lean. Prefer `python:3.10-slim` (or similarly slim bases) for Python-only services and rely on official upstream images for Kafka, MinIO, PostgreSQL, and Spark.
+- Keep runtime images lean. Prefer `python:3.11-slim` (or similarly slim bases) for Python-only services and rely on official upstream images for Kafka, MinIO, PostgreSQL, and Spark.
 - Install only the dependencies required by each service. Dependency files are split by concern:
 
 ```text
@@ -126,7 +126,7 @@ start streaming -> run simulator -> inspect Bronze/Silver/serving
 
 ## Container responsibilities
 
-- The simulator image should remain Python-only (conceptually `python:3.10-slim + requirements/simulator.txt + simulator code`).
+- The simulator image should remain Python-only (conceptually `python:3.11-slim + requirements/simulator.txt + simulator code`).
 - Spark streaming, batch, and scheduler reuse one project-owned Spark runtime image.
 - Infrastructure components (Kafka, MinIO, PostgreSQL) rely on official upstream images.
 - Avoid unnecessary OS packages, cached artifacts, or compiler toolchains in runtime images. Use multi-stage builds if native extensions are required.

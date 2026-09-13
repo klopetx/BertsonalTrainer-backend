@@ -118,11 +118,11 @@ Reference:
 
 ### 6) Python Version Consistency (Documentation + Tooling)
 
-Repo invariants say Python 3.10 only, but `README.md` mentions Python 3.11 for local tests and `scripts/test.sh` uses `py -3` (which may choose 3.11 depending on the machine).
+Repo runtime is Python 3.11 (docs + containers + local tooling aligned).
 
 Deliverables:
 
-- Align docs/scripts with the authoritative version requirement (3.10) or formally change the invariant if intended.
+- Keep docs/scripts pinned to Python 3.11 (avoid ambiguous `py -3` selection).
 
 References:
 

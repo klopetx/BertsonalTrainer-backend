@@ -4,7 +4,7 @@ The simulator produces synthetic session events for the BertsonalTrainer backend
 
 ## Purpose and runtime
 
-- Implemented in Python 3.10 and executed via Bash-friendly CLI wrappers (see `./scripts/simulate.sh`).
+- Implemented in Python 3.11 and executed via Bash-friendly CLI wrappers (see `./scripts/simulate.sh`).
 - Publishes exactly one Kafka message per completed session, adhering to the canonical `session-events` contract in `docs/kafka-contract.md`.
 - Remains independent of Spark; responsibility is limited to generating events and pushing them to Kafka.
 

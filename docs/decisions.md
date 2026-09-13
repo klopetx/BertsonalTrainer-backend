@@ -11,7 +11,7 @@ This log summarizes the most important decisions recorded in `AGENTS.md`, along 
 - **Cron instead of Airflow/Prefect/Dagster.** The MVP orchestrates a single daily batch. A lightweight cron container is easier to operate on the reference workstation and avoids unnecessary platform overhead.
 - **No Spark watermarking in the MVP.** The workload does not require windowing or stream-stream joins. Explicit business-day cutoffs plus checkpointing meet the requirements with less stateful complexity.
 - **Container-first execution with lean images.** Compose keeps services isolated, reproduces the local environment, and avoids cross-contamination of dependencies. Splitting `requirements/` by service prevents installing unnecessary packages into every image.
-- **Python 3.10 + `venv`.** Fixing the runtime version and using the standard library’s virtual environments keeps the stack reproducible without introducing additional tooling such as Poetry or Conda.
+- **Python 3.11 + `venv`.** Fixing the runtime version and using the standard library’s virtual environments keeps the stack reproducible without introducing additional tooling such as Poetry or Conda.
 - **No REST API in the MVP.** The project focuses on data engineering deliverables; adding product-facing APIs would expand scope without supporting the current thesis goals.
 
 ## Data integrity and scoring

@@ -17,7 +17,7 @@ Silver -> daily Spark batch -> PostgreSQL gold.* tables -> (future) Metabase
 - Daily Spark batch enforces definitive deduplication, originality inputs, and applies hardness (difficulty) weighting before writing Gold tables.
 
 ## Core Invariants (do not break)
-- Python 3.10 only; local envs use `python -m venv` and no alternate package managers.
+- Python 3.11 only; local envs use `python -m venv` and no alternate package managers.
 - Requirements are split (`requirements/simulator.txt`, `requirements/spark.txt`, `requirements/dev.txt`).
 - Container-first workflow on Podman/`compose.yaml`; no Docker Desktop-only features.
 - Runtime images stay lean; install only service-specific dependencies; infrastructure services use upstream images.
