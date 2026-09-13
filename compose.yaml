@@ -228,9 +228,9 @@ services:
   metabase-db:
     image: postgres:15
     environment:
-      POSTGRES_USER: ${MB_POSTGRES_USER:-metabase}
-      POSTGRES_PASSWORD: ${MB_POSTGRES_PASSWORD:-metabase_pw}
-      POSTGRES_DB: ${MB_POSTGRES_DB:-metabase}
+      POSTGRES_USER: ${MB_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${MB_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${MB_POSTGRES_DB}
     ports:
       - "5433:5432"
     volumes:
@@ -238,7 +238,7 @@ services:
     healthcheck:
       test:
         - "CMD-SHELL"
-        - "pg_isready -U ${MB_POSTGRES_USER:-metabase} -d ${MB_POSTGRES_DB:-metabase}"
+        - "pg_isready -U ${MB_POSTGRES_USER} -d ${MB_POSTGRES_DB}"
       interval: 10s
       timeout: 5s
       retries: 10
@@ -254,10 +254,10 @@ services:
       - "3000:3000"
     environment:
       MB_DB_TYPE: postgres
-      MB_DB_DBNAME: ${MB_POSTGRES_DB:-metabase}
+      MB_DB_DBNAME: ${MB_POSTGRES_DB}
       MB_DB_PORT: "5432"
-      MB_DB_USER: ${MB_POSTGRES_USER:-metabase}
-      MB_DB_PASS: ${MB_POSTGRES_PASSWORD:-metabase_pw}
+      MB_DB_USER: ${MB_POSTGRES_USER}
+      MB_DB_PASS: ${MB_POSTGRES_PASSWORD}
       MB_DB_HOST: metabase-db
       MB_ANON_TRACKING_ENABLED: "false"
       JAVA_TIMEZONE: ${BUSINESS_TIMEZONE:-Europe/Madrid}
