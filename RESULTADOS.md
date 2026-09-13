@@ -2,11 +2,29 @@
 
 Resumen en español de las métricas de evaluación del backend: lo esperado (objetivos SMART y SLO) frente a lo logrado (evidencia registrada). Fuentes: `docs/acceptance-criteria.md` (objetivos y SLO), `docs/evidence/` (evidencia de ejecuciones) y `scripts/acceptance-measure.sh` (medición de SLIs).
 
+## SLO y SLI iniciales
+
+- **SLI** (*Service Level Indicator*, indicador de nivel de servicio): la medición concreta que se observa.
+- **SLO** (*Service Level Objective*, objetivo de nivel de servicio): el umbral que se compromete a cumplir sobre un SLI.
+
+| Aspecto | SLI / medición | SLO inicial | Aplica a |
+| --- | --- | --- | --- |
+| Latencia de puntuación provisional | `serving.provisional_scores.calculated_at − kafka_timestamp` | p95 ≤ 5 s; p99 ≤ 10 s | Perfil nominal |
+| Completitud de ingesta en Bronze | Entregas de Kafka procesadas con éxito vs. registros en Bronze | 100 % | Tests funcionales/de integración |
+| Idempotencia provisional | Filas provisionales por evento lógico | Exactamente 1 | Tests de entrega duplicada |
+| Rendimiento (throughput) en carga acelerada | Eventos de sesión totalmente procesados / segundos transcurridos | ≥ 100 eventos/s de media | Perfil de 60.000 usuarios |
+| Completitud de la carga acelerada | Tiempo de procesado extremo a extremo de 60.000 sesiones | ≤ 10 min | Perfil de 60.000 usuarios |
+| Tiempo de ejecución del batch diario | Inicio del batch hasta el reemplazo correcto de Gold | ≤ 10 min | Perfil de 60.000 usuarios |
+| Idempotencia de reproceso de Gold | Diff funcional tras re-ejecutar la misma fecha de negocio | Sin cambios; 0 filas lógicas duplicadas | Tests de integración del batch |
+| Flujo de demo grabado | Simulación de 20 usuarios hasta resultado Gold inspeccionable con batch forzado (infra ya en marcha) | ≤ 3 min | Perfil demo |
+
+Nota: no se exige la SLO de latencia del perfil nominal durante la prueba de carga acelerada de 60.000 sesiones (intencionadamente rápida); ese perfil valida throughput, integridad y tiempo de completitud.
+
 ## Métricas de evaluación — esperado vs. logrado
 
 | Métrica (SLI) | Esperado (SLO) | Logrado | Perfil |
 | --- | --- | --- | --- |
-| Latencia de puntuación provisional (`calculated_at − kafka_timestamp`) | p95 ≤ 5 s; p99 ≤ 10 s | Medida en las ejecuciones, pero no conservada en el repo (logs brutos en `evidence/runs/`, gitignored) | Nominal |
+| Latencia de puntuación provisional (`calculated_at − kafka_timestamp`) | p95 ≤ 5 s; p99 ≤ 10 s | **FAIL**: nominal 2026-09-16 → p95 21,2 s / p99 21,2 s; nominal 2026-09-17 → p95 9,3 s / p99 10,0 s. Re-medida 2026-09-13 desde la BD (ver `docs/evidence/20260913T234600Z_latency_remeasurement.md`) | Nominal |
 | Completitud de ingesta en Bronze (entregas de Kafka procesadas vs. registros en Bronze) | 100 % | Cubierta por la suite de tests (sin evidencia numérica registrada) | Tests funcionales/integración |
 | Idempotencia provisional (filas por evento lógico) | Exactamente 1 | Cubierta por `tests/streaming/test_provisional_insert_idempotency.py` | Tests de entrega duplicada |
 | Rendimiento (throughput) en carga acelerada | ≥ 100 eventos/s de media | **731,71 ev/s** → CUMPLE (~7× margen) | 60.000 usuarios |
@@ -99,6 +117,6 @@ final_score = daily_score × m_r
 
 ## Limitaciones de la evidencia
 
-- Los percentiles p95/p99 de latencia se midieron en su momento con `scripts/acceptance-measure.sh`, pero los `measure.out` brutos no se commitearon, por lo que la evidencia numérica de latencia no está en el repositorio.
+- Los percentiles p95/p99 de latencia no constaban en los resúmenes de `docs/evidence/` (los `measure.out` brutos se excluyen de Git); se re-midieron el 2026-09-13 directamente sobre `serving.provisional_scores` con el mismo SQL de `scripts/acceptance-measure.sh`. Resultado: **FAIL** en ambas ejecuciones nominales (evidencia en `docs/evidence/20260913T234600Z_latency_remeasurement.md`). El SLI mide de producción en Kafka a escritura en PostgreSQL e incluye la espera en cola del microbatch; en ejecuciones sin backlog el flujo tarda 30–50 ms, por lo que la brecha la domina el coste fijo por microbatch, no el scoring en sí. El SLO queda sin cambiar; su recalibración es una decisión abierta.
 - Las SLO basadas en tests (completitud de Bronze, idempotencia provisional, idempotencia de Gold) se acreditan mediante la suite automatizada, no mediante valores numéricos registrados.
 - La SLO de latencia nominal no se exige durante la prueba de carga acelerada de 60.000 sesiones; ese perfil valida throughput, integridad y tiempo de completitud.

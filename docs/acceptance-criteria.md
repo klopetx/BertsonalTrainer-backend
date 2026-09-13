@@ -26,6 +26,13 @@ These targets define how the BertsonalTrainer backend demonstrates functional co
 
 - Do not require the nominal scoring-latency SLO during the intentionally accelerated 60,000-session load test. That profile validates throughput, integrity, and completion time.
 
+### Latency evidence (first post-hoc measurement, 2026-09-13)
+
+- Re-measured from the persisted `serving.provisional_scores` table (raw `measure.out` logs were not committed), using the same SQL as `scripts/acceptance-measure.sh`. Detailed evidence: `docs/evidence/20260913T234600Z_latency_remeasurement.md`.
+- Nominal profile results: 2026-09-16 → p95 21.2 s / p99 21.2 s; 2026-09-17 (500 ms pacing) → p95 9.3 s / p99 10.0 s. Both **FAIL** the p95 ≤ 5 s target.
+- The SLI spans Kafka produce → provisional write and therefore includes micro-batch queue wait. Idle/small runs show 30–50 ms end-to-end latency; the gap under sustained arrival is dominated by per-batch fixed costs (Python UDFs, several Spark jobs per batch, two S3A parquet appends, per-batch JDBC connect).
+- The SLO remains unchanged; recalibrating it for the reference workstation is an open decision to be discussed, not silently applied.
+
 ## Evidence tracking
 
 - Measurement plans, executed commands, captured metrics, and PASS/FAIL conclusions must be recorded in this document (or linked artifacts) as the implementation matures.
