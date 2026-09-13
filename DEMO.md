@@ -16,7 +16,7 @@ podman compose exec -T postgres psql -U bertsonal -d bertsonal -c \
 ```
 
 ```bash
-BUSINESS_DATE=$(date +%F)
+BUSINESS_DATE=2026-09-18   # example: first date not shown by the query above; pick your own fresh date
 USERS=5
 RHYME=ari
 RHYME_ID=R001
