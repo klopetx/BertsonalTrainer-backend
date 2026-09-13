@@ -5,23 +5,27 @@ Author: Kerman Lopez de Calle
 ## Quick Start
 
 1. **Install prerequisites**: Podman (or Docker Desktop with podman compatibility) and Python 3.11 for local tests.
-2. **Start infra + streaming**
+2. **Create the local environment file** (required; compose resolves all credentials from `.env`, with no inline fallbacks):
+   ```bash
+   cp .env.example .env
+   ```
+3. **Start infra + streaming**
    ```bash
    ./scripts/streaming-up.sh
    ```
-3. **Publish sample sessions**
+4. **Publish sample sessions**
    ```bash
    ./scripts/simulate.sh --users 2 --business-date 2026-09-03 --rhyme ari --rhyme-id R001 --seed 42
    ```
-4. **Inspect outputs**
+5. **Inspect outputs**
    - Bronze parquet: `s3a://bronze/session-events/`
    - Silver parquet: `s3a://silver/sessions/` and `s3a://silver/session-words/`
    - Provisional scores: `podman compose exec postgres psql -U bertsonal -d bertsonal -c "select * from serving.provisional_scores;"`
-5. **Run the daily batch (after the cutoff or with `--force`)**
+6. **Run the daily batch (after the cutoff or with `--force`)**
    ```bash
    ./scripts/batch-run.sh --business-date 2026-09-03 --force
    ```
-6. **Optional scheduler demo**
+7. **Optional scheduler demo**
    ```bash
    ./scripts/scheduler-up.sh
    ```
@@ -42,3 +46,12 @@ Acceptance targets and evidence capture live in `docs/acceptance-criteria.md`.
 
 - Run the acceptance scripts locally to generate evidence artifacts.
 - Commit small summaries under `docs/evidence/` and keep full raw logs under `evidence/runs/` (gitignored).
+
+## Data sources
+
+This project uses word data derived from the Basque Wiktionary:
+https://eu.wiktionary.org/
+
+Wiktionary content is available under the Creative Commons
+Attribution-ShareAlike 4.0 International (CC BY-SA 4.0) license:
+https://creativecommons.org/licenses/by-sa/4.0/
