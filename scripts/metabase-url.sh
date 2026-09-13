@@ -13,10 +13,11 @@ else
   exit 1
 fi
 
-CANDIDATES=$("$PODMAN" machine ssh -- grep -B1 /32 /proc/net/fib_trie 2>/dev/null \
-  | grep -oE '([0-9]+\.){3}[0-9]+' \
+CANDIDATES=$("$PODMAN" machine ssh -- ip -o -4 addr show 2>/dev/null \
+  | grep -oE 'inet ([0-9]+\.){3}[0-9]+' \
+  | cut -d' ' -f2 \
   | sort -u \
-  | grep -vE '^127\.|\.0$|\.255$|^10\.89\.' || true)
+  | grep -vE '^127\.|^10\.89\.' || true)
 
 MACHINE_IP=$(printf '%s\n' "$CANDIDATES" | head -n 1)
 
