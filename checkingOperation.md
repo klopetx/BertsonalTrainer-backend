@@ -44,10 +44,10 @@ Press `Ctrl+C` after the sample messages display to exit the consumer.
 
 ### MinIO: Bronze & Silver
 
-#### Configure CLI alias (uses compose defaults)
+#### Configure CLI alias (credentials resolved from .env by the service environment)
 
 ```bash
-podman compose run --rm minio-init mc alias set local http://minio:9000 ${MINIO_ROOT_USER:-minioadmin} ${MINIO_ROOT_PASSWORD:-minioadmin123}
+podman compose run --rm minio-init sh -c 'mc alias set local http://minio:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"'
 ```
 
 #### List buckets & prefixes

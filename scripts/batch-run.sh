@@ -24,4 +24,4 @@ fi
 cd "$ROOT_DIR"
 
 echo "[batch-run] running spark-batch with args: $*" >&2
-$COMPOSE_BIN run --rm spark-batch "$@"
+$COMPOSE_BIN --profile batch run --rm spark-batch "$@"

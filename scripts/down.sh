@@ -17,4 +17,4 @@ fi
 cd "$ROOT_DIR"
 
 echo "[down] stopping services" >&2
-$COMPOSE_BIN down "$@"
+$COMPOSE_BIN --profile batch --profile scheduler --profile metabase down "$@"

@@ -19,4 +19,4 @@ fi
 cd "$ROOT_DIR"
 
 echo "[scheduler-up] starting scheduler service" >&2
-$COMPOSE_BIN up -d scheduler
+$COMPOSE_BIN --profile scheduler up -d scheduler
