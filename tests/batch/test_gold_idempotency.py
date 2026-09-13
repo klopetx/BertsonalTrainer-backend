@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+import os
 from datetime import date, datetime, timezone
-from uuid import UUID
 
 import pytest
 
@@ -12,17 +12,16 @@ def _connect_or_skip():
     except Exception:  # pragma: no cover
         pytest.skip("psycopg2 not available in this environment")
 
-    # Defaults match local compose.yaml port mapping.
-    host = "localhost"
-    port = 5432
-    user = "bertsonal"
-    password = "bertsonal_pw"
-    dbname = "bertsonal"
+    host = os.environ.get("POSTGRES_TEST_HOST", "localhost")
+    port = int(os.environ.get("POSTGRES_TEST_PORT", "5432"))
+    user = os.environ.get("POSTGRES_USER", "bertsonal")
+    password = os.environ.get("POSTGRES_PASSWORD", "bertsonal_pw")
+    dbname = os.environ.get("POSTGRES_DB", "bertsonal")
 
     try:
         return psycopg2.connect(host=host, port=port, user=user, password=password, dbname=dbname)
     except Exception:  # pragma: no cover
-        pytest.skip("Postgres not reachable on localhost:5432; start compose infra to run this test")
+        pytest.skip(f"Postgres not reachable on {host}:{port}; start compose infra to run this test")
 
 
 def _fetchall(cur, query: str, params: tuple):
@@ -45,11 +44,11 @@ def test_gold_write_is_idempotent_for_same_date():
     from bertsonal_spark.config import BatchConfig
 
     cfg = BatchConfig(
-        postgres_host="localhost",
-        postgres_port="5432",
-        postgres_user="bertsonal",
-        postgres_password="bertsonal_pw",
-        postgres_db="bertsonal",
+        postgres_host=os.environ.get("POSTGRES_TEST_HOST", "localhost"),
+        postgres_port=os.environ.get("POSTGRES_TEST_PORT", "5432"),
+        postgres_user=os.environ.get("POSTGRES_USER", "bertsonal"),
+        postgres_password=os.environ.get("POSTGRES_PASSWORD", "bertsonal_pw"),
+        postgres_db=os.environ.get("POSTGRES_DB", "bertsonal"),
     )
 
     business_date = date(2099, 12, 30)
@@ -58,9 +57,9 @@ def test_gold_write_is_idempotent_for_same_date():
 
     calculated_at = datetime(2099, 12, 31, 0, 0, 0, tzinfo=timezone.utc)
 
-    # Two users, deterministic UUIDs.
-    s1 = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
-    s2 = UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
+    # Two users, deterministic UUIDs (as plain strings, matching Spark row types).
+    s1 = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+    s2 = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
 
     daily_rows = [
         (
@@ -200,6 +199,9 @@ def test_gold_write_is_idempotent_for_same_date():
                 (month_start,),
             )
 
+        # Release the read transaction so the next _write_gold_tables DDL is not blocked.
+        conn.rollback()
+
         # Second run (same inputs)
         _write_gold_tables(business_date, daily_rows, metrics_rows, word_rows, cfg)
 
@@ -235,6 +237,8 @@ def test_gold_write_is_idempotent_for_same_date():
                 WHERE month_start_date = %s
                 ORDER BY user_id
                 """, (month_start,))
+
+        conn.rollback()
 
         assert snap1_daily == snap2_daily
         assert snap1_rhyme == snap2_rhyme

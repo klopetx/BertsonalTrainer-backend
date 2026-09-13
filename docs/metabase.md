@@ -1,31 +1,34 @@
 # Metabase (Optional, Isolated)
 
-This repo does not ship Metabase as part of the core pipeline. To avoid
-interfering with Kafka/Spark/MinIO/Postgres jobs, Metabase is provided as an
-opt-in, standalone Compose file under `infra/metabase/`.
+Metabase is not part of the core pipeline. To avoid interfering with
+Kafka/Spark/MinIO/Postgres jobs, its services (`metabase`, `metabase-db`) live
+in the main `compose.yaml` but are started only on demand.
 
 The intent is:
 
-1. Run Metabase independently.
+1. Run Metabase independently from the data services.
 2. Manually connect it to the project's PostgreSQL as a read-only analytics
    source.
 
-## Start / stop (standalone)
+## Start / stop
 
 From the repo root:
 
 ```bash
-podman compose -f infra/metabase/compose.metabase.yaml up -d
+podman compose up -d metabase
 ```
 
 Open Metabase:
 
-- http://localhost:3000
+- With a podman machine on WSL, published ports are not forwarded to Windows
+  `localhost`; get the URL with `./scripts/metabase-url.sh` (e.g.
+  `http://172.26.32.83:3000`). On setups where `localhost` works, use
+  `http://localhost:3000`.
 
-Stop:
+Stop only Metabase:
 
 ```bash
-podman compose -f infra/metabase/compose.metabase.yaml down
+podman compose stop metabase metabase-db
 ```
 
 ## Connect Metabase to the project Postgres (Gold tables)
@@ -52,8 +55,8 @@ Suggested parameters:
 - Host: `host.containers.internal` (Podman) or `host.docker.internal` (Docker)
 - Port: `5432`
 - Database name: `bertsonal` (default in `compose.yaml`)
-- Username: `bertsonal`
-- Password: `bertsonal_pw`
+- Username: the `POSTGRES_USER` value from `.env` (default `bertsonal`)
+- Password: the `POSTGRES_PASSWORD` value from `.env` (default `bertsonal_pw`)
 
 Once connected, browse the Gold layer tables:
 

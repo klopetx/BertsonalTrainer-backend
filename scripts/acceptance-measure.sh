@@ -11,6 +11,9 @@ BUSINESS_DATE="$1"
 ROOT_DIR=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT_DIR"
 
+DB_USER=$(grep -m1 '^POSTGRES_USER=' .env 2>/dev/null | cut -d= -f2 | tr -d '\r')
+DB_USER=${DB_USER:-bertsonal}
+
 if [ -z "${COMPOSE_BIN:-}" ]; then
   if command -v podman >/dev/null 2>&1; then
     COMPOSE_BIN="podman compose"
@@ -24,7 +27,7 @@ fi
 
 echo "[acceptance-measure] Measuring for business_date=${BUSINESS_DATE}" >&2
 
-$COMPOSE_BIN exec -T postgres psql -U bertsonal -d bertsonal -v ON_ERROR_STOP=1 <<SQL
+$COMPOSE_BIN exec -T postgres psql -U "$DB_USER" -d bertsonal -v ON_ERROR_STOP=1 <<SQL
 \echo '--- provisional completeness'
 SELECT COUNT(*) AS provisional_rows
 FROM serving.provisional_scores

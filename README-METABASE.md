@@ -1,36 +1,39 @@
 # Metabase (Optional) Quickstart
 
 This repo keeps Metabase **out of the core pipeline** to avoid interfering with
-Kafka/Spark/MinIO/Postgres jobs. Metabase is provided as an **opt-in** stack
-under `infra/metabase/`.
+Kafka/Spark/MinIO/Postgres jobs. Its services (`metabase`, `metabase-db`) live
+in the main `compose.yaml` as **opt-in** services started only on demand.
 
 You will:
 
-1. Start Metabase standalone.
+1. Start Metabase on demand.
 2. Connect it to the project's PostgreSQL as a **read-only** analytics source.
 3. Build dashboards on the `gold.*` tables.
 
-## 1) Start Metabase (standalone)
+## 1) Start Metabase
 
 From the repo root:
 
 ```bash
-podman compose -f infra/metabase/compose.metabase.yaml up -d
+podman compose up -d metabase
 ```
 
 Open Metabase:
 
-- http://localhost:3000
+- With a podman machine on WSL, published ports are not forwarded to Windows
+  `localhost`; get the URL with `./scripts/metabase-url.sh` (e.g.
+  `http://172.26.32.83:3000`). On setups where `localhost` works, use
+  `http://localhost:3000`.
 
-Stop Metabase:
+Stop only Metabase:
 
 ```bash
-podman compose -f infra/metabase/compose.metabase.yaml down
+podman compose stop metabase metabase-db
 ```
 
 Notes:
 
-- The standalone stack uses its own Postgres for Metabase metadata on `localhost:5433`
+- Metabase uses its own metadata Postgres (`metabase-db`) published on `localhost:5433`
   to avoid clashing with the project's Postgres (usually `localhost:5432`).
 - Your project pipeline keeps running unchanged.
 
@@ -50,7 +53,8 @@ Typical flow:
 Confirm tables:
 
 ```bash
-podman compose exec postgres psql -U bertsonal -d bertsonal -c "\dt gold.*"
+DB_USER=$(grep -m1 '^POSTGRES_USER=' .env | cut -d= -f2 | tr -d '\r'); DB_USER=${DB_USER:-bertsonal}
+podman compose exec postgres psql -U "$DB_USER" -d bertsonal -c "\dt gold.*"
 ```
 
 Expected in the MVP:
@@ -78,8 +82,8 @@ In Metabase:
 - Host: `host.containers.internal` (Podman) or `host.docker.internal` (Docker)
 - Port: `5432`
 - Database name: `bertsonal` (default)
-- Username: `bertsonal` (default)
-- Password: `bertsonal_pw` (default)
+- Username: the `POSTGRES_USER` value from `.env` (default `bertsonal`)
+- Password: the `POSTGRES_PASSWORD` value from `.env` (default `bertsonal_pw`)
 
 Then browse schemas:
 

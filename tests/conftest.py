@@ -24,6 +24,21 @@ else:
     os.environ["PYTHONPATH"] = joined_paths
 
 
+def _load_local_env() -> None:
+    env_path = ROOT / ".env"
+    if not env_path.exists():
+        return
+    for line in env_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        os.environ.setdefault(key.strip(), value.strip())
+
+
+_load_local_env()
+
+
 @pytest.fixture
 def fixture_dictionary_path(tmp_path: Path) -> Path:
     """Copy the test dictionary into a temp path to keep tests isolated."""

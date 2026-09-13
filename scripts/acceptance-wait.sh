@@ -14,6 +14,9 @@ POLL_SECONDS="${4:-5}"
 ROOT_DIR=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT_DIR"
 
+DB_USER=$(grep -m1 '^POSTGRES_USER=' .env 2>/dev/null | cut -d= -f2 | tr -d '\r')
+DB_USER=${DB_USER:-bertsonal}
+
 if [ -z "${COMPOSE_BIN:-}" ]; then
   if command -v podman >/dev/null 2>&1; then
     COMPOSE_BIN="podman compose"
@@ -34,7 +37,7 @@ while true; do
     exit 2
   fi
 
-  count=$($COMPOSE_BIN exec -T postgres psql -U bertsonal -d bertsonal -t -A -c "SELECT COUNT(*) FROM serving.provisional_scores WHERE business_date = DATE '${BUSINESS_DATE}';" | tr -d '\r')
+  count=$($COMPOSE_BIN exec -T postgres psql -U "$DB_USER" -d bertsonal -t -A -c "SELECT COUNT(*) FROM serving.provisional_scores WHERE business_date = DATE '${BUSINESS_DATE}';" | tr -d '\r')
   count=${count:-0}
   echo "[acceptance-wait] provisional_scores for ${BUSINESS_DATE}: ${count}/${EXPECTED}" >&2
 

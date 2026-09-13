@@ -8,19 +8,22 @@ Run commands from the repo root in **Git Bash** (recommended) so the `./scripts/
 
 ## 0) Demo Variables (Pick Fresh Values)
 
-Pick a business date that has no rows yet in `serving.provisional_scores` (first accepted event wins, so a date with prior data will show no new provisional scores) and that is not in the past (past dates are classified as late events). Check existing dates first:
+Pick a business date that has no rows yet in `serving.provisional_scores` (first accepted event wins, so a date with prior data will show no new provisional scores) and that is not in the past (past dates are classified as late events).
 
 ```bash
-podman compose exec -T postgres psql -U bertsonal -d bertsonal -c \
-  "SELECT DISTINCT business_date FROM serving.provisional_scores ORDER BY business_date;"
-```
-
-```bash
-BUSINESS_DATE=2026-09-18   # example: first date not shown by the query above; pick your own fresh date
+BUSINESS_DATE=2026-09-18   # example: first unused date; pick your own fresh date
 USERS=5
 RHYME=ari
 RHYME_ID=R001
 SEED=42
+DB_USER=$(grep -m1 '^POSTGRES_USER=' .env | cut -d= -f2 | tr -d '\r'); DB_USER=${DB_USER:-bertsonal}
+```
+
+Check existing dates first (the chosen date should not appear below):
+
+```bash
+podman compose exec -T postgres psql -U "$DB_USER" -d bertsonal -c \
+  "SELECT DISTINCT business_date FROM serving.provisional_scores ORDER BY business_date;"
 ```
 
 ## 1) Start Infrastructure
@@ -74,6 +77,20 @@ echo "Kafka end offset BEFORE produce: ${START_OFFSET}"
   --delay-ms 0
 ```
 
+What you will (and won't) see:
+
+- The simulator itself prints only two lines: `Starting simulator for N users on DATE -> topic session-events` and `Finished publishing N events`.
+- Kafka broker logs do **not** show produced messages at the default log level; do not wait for them.
+- Visible proof of ingestion is the end-offset delta and the messages themselves (step 5). Optional check right after producing — the offset should be `START_OFFSET + USERS`:
+
+```bash
+podman compose exec -T kafka \
+  /opt/kafka/bin/kafka-get-offsets.sh \
+  --bootstrap-server kafka:9092 --topic session-events
+```
+
+- Optional: keep `./scripts/logs.sh spark-streaming` open in a separate tab to show micro-batches processing the events as they arrive.
+
 ## 5) Show the New Kafka Messages
 
 Consume starting from the offset captured in step 3.
@@ -103,7 +120,7 @@ This waits until `serving.provisional_scores` has at least `USERS` rows for the 
 ## 7) Show Postgres Serving Table
 
 ```bash
-podman compose exec -T postgres psql -U bertsonal -d bertsonal -c \
+podman compose exec -T postgres psql -U "$DB_USER" -d bertsonal -c \
   "SELECT user_id, business_date, rhyme_id, valid_word_count, provisional_score, kafka_timestamp, calculated_at\
    FROM serving.provisional_scores\
    WHERE business_date = DATE '${BUSINESS_DATE}'\
@@ -164,11 +181,14 @@ cfg = StreamingConfig()
 spark = build_spark_session("demo-inspect-silver")
 configure_s3(spark, cfg.minio_endpoint, cfg.minio_access_key, cfg.minio_secret_key)
 
-sessions_path = f"{cfg.silver_sessions_path}/business_date={business_date}"
-words_path = f"{cfg.silver_words_path}/business_date={business_date}"
-
-sessions = spark.read.parquet(sessions_path)
-words = spark.read.parquet(words_path)
+sessions = (
+    spark.read.option("basePath", cfg.silver_sessions_path)
+    .parquet(f"{cfg.silver_sessions_path}/business_date={business_date}")
+)
+words = (
+    spark.read.option("basePath", cfg.silver_words_path)
+    .parquet(f"{cfg.silver_words_path}/business_date={business_date}")
+)
 
 print("\\nSilver sessions (sample):")
 sessions.select(
@@ -202,20 +222,26 @@ PY
 
 ## 10) Start Metabase (Optional) and Show "Nothing Yet" in Gold
 
-Metabase is a standalone compose stack:
+Metabase is part of the main compose stack (starts only on demand):
 
 ```bash
-podman compose -f infra/metabase/compose.metabase.yaml up -d
+podman compose up -d metabase
 ```
 
 Open Metabase:
 
-- http://localhost:3000
+- With a podman machine on WSL, published ports are not forwarded to Windows `localhost`; use the machine URL instead:
+
+```bash
+./scripts/metabase-url.sh
+```
+
+- Open the printed URL (e.g. `http://172.26.32.83:3000`).
 
 Before the batch runs, Gold should be empty/non-existent. Show it in SQL:
 
 ```bash
-podman compose exec -T postgres psql -U bertsonal -d bertsonal -c "\\dt gold.*"
+podman compose exec -T postgres psql -U "$DB_USER" -d bertsonal -c "\\dt gold.*"
 ```
 
 In Metabase:
@@ -234,13 +260,13 @@ For a demo video, use `--force` (bypasses cutoff guardrails).
 ## 12) Show Postgres Gold Tables (After Batch)
 
 ```bash
-podman compose exec -T postgres psql -U bertsonal -d bertsonal -c "\\dt gold.*"
+podman compose exec -T postgres psql -U "$DB_USER" -d bertsonal -c "\\dt gold.*"
 ```
 
 Daily leaderboard:
 
 ```bash
-podman compose exec -T postgres psql -U bertsonal -d bertsonal -c \
+podman compose exec -T postgres psql -U "$DB_USER" -d bertsonal -c \
   "SELECT business_date, rank_position, user_id, final_score, daily_score, hardness_weighted_daily_score\
    FROM gold.daily_scores\
    WHERE business_date = DATE '${BUSINESS_DATE}'\
@@ -251,7 +277,7 @@ podman compose exec -T postgres psql -U bertsonal -d bertsonal -c \
 Rhyme/day metrics:
 
 ```bash
-podman compose exec -T postgres psql -U bertsonal -d bertsonal -c \
+podman compose exec -T postgres psql -U "$DB_USER" -d bertsonal -c \
   "SELECT business_date, rhyme_id, rhyme, participants, total_valid_words, average_valid_words_per_session\
    FROM gold.rhyme_daily_metrics\
    WHERE business_date = DATE '${BUSINESS_DATE}';"
@@ -260,7 +286,7 @@ podman compose exec -T postgres psql -U bertsonal -d bertsonal -c \
 Word originality metrics:
 
 ```bash
-podman compose exec -T postgres psql -U bertsonal -d bertsonal -c \
+podman compose exec -T postgres psql -U "$DB_USER" -d bertsonal -c \
   "SELECT normalized_word, AVG(daily_repetitions) AS avg_daily_repetitions, COUNT(*) AS occurrences\
    FROM gold.session_word_metrics\
    WHERE business_date = DATE '${BUSINESS_DATE}'\
@@ -279,14 +305,8 @@ In Metabase:
 
 ## 14) Cleanup (After Recording)
 
-Stop the main stack:
+Stop the whole stack (Metabase included):
 
 ```bash
 ./scripts/down.sh
-```
-
-Stop Metabase:
-
-```bash
-podman compose -f infra/metabase/compose.metabase.yaml down
 ```
