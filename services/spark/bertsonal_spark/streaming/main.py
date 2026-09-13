@@ -406,6 +406,22 @@ def _process_silver_batch(
     valid_df.unpersist()
 
 
+PROVISIONAL_INSERT_SQL = """
+INSERT INTO serving.provisional_scores (
+    event_id,
+    session_id,
+    user_id,
+    business_date,
+    rhyme_id,
+    valid_word_count,
+    provisional_score,
+    kafka_timestamp,
+    calculated_at
+) VALUES %s
+ON CONFLICT DO NOTHING
+"""
+
+
 def _write_provisional_scores(batch_df: DataFrame, batch_id: int, config: StreamingConfig) -> None:
     rows = (
         batch_df.select(
@@ -456,24 +472,7 @@ def _write_provisional_scores(batch_df: DataFrame, batch_id: int, config: Stream
             SCHEMA_INITIALIZED = True
         with conn:
             with conn.cursor() as cur:
-                execute_values(
-                    cur,
-                    """
-                    INSERT INTO serving.provisional_scores (
-                        event_id,
-                        session_id,
-                        user_id,
-                        business_date,
-                        rhyme_id,
-                        valid_word_count,
-                        provisional_score,
-                        kafka_timestamp,
-                        calculated_at
-                    ) VALUES %s
-                    ON CONFLICT (event_id) DO NOTHING
-                    """,
-                    payload,
-                )
+                execute_values(cur, PROVISIONAL_INSERT_SQL, payload)
     finally:
         conn.close()
 
